@@ -23,6 +23,7 @@ import {
   subsectionBody,
   validateStructure,
 } from './briefTemplate'
+import { findTagalogLines } from './tagalog'
 import { hashString } from './text'
 
 /* ================================================================== */
@@ -246,6 +247,17 @@ function fixPrecedents(markdown: string, fb: FallbackContent): string {
 }
 
 /* ================================================================== */
+/* 7. English only (Tagalog passages must be translated)               */
+/* ================================================================== */
+
+export function findLanguageIssues(markdown: string): ComplianceIssue[] {
+  return findTagalogLines(markdown).map(({ index, line }) => ({
+    message: `Line ${index + 1} is written in Tagalog — translate it to English.`,
+    excerpt: line.replace(/\s+/g, ' ').trim().slice(0, 120),
+  }))
+}
+
+/* ================================================================== */
 /* Audit                                                               */
 /* ================================================================== */
 
@@ -257,6 +269,7 @@ export const CHECK_LABELS: Record<ComplianceCheckId, string> = {
   'essential-criteria': 'All 5 Essential Criteria (Maintainability, Durability, Security, Low-VOC, Aging-in-Place) included',
   'precedents-where-when': 'Real-world precedents include Where & When proof',
   structure: 'Exact 9-section Markdown structure verified',
+  'english-only': 'Written entirely in English (Tagalog passages translated)',
 }
 
 export function auditBrief(markdown: string): ComplianceReport {
@@ -276,6 +289,7 @@ export function auditBrief(markdown: string): ComplianceReport {
     check('essential-criteria', missingCriteria(md).map((c) => ({ message: `Essential criterion "${c}" is not addressed.` }))),
     check('precedents-where-when', findPrecedentIssues(md)),
     check('structure', validateStructure(md).map((message) => ({ message }))),
+    check('english-only', findLanguageIssues(md)),
   ]
   const passedCount = checks.filter((c) => c.passed).length
   return { checks, passedCount, total: checks.length, allPassed: passedCount === checks.length, auditedHash: hashString(md) }
@@ -333,6 +347,9 @@ export function applyComplianceFix(id: ComplianceCheckId, markdown: string, ctx:
     }
     case 'precedents-where-when':
       return fixPrecedents(markdown, ctx.fallback)
+    case 'english-only':
+      // Translation needs a model, so it runs asynchronously from the store (translateBriefTagalog).
+      return markdown
   }
 }
 

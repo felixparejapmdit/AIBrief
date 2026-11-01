@@ -1,4 +1,7 @@
 import {
+  ArrowRight,
+  CircleAlert,
+  CircleCheck,
   Cloud,
   Cpu,
   Download,
@@ -37,11 +40,11 @@ function SpecTile({ icon, label, value, sub, testId, tone = 'default' }: { icon:
     <div className="panel-raised flex min-h-[86px] gap-3 p-3" data-testid={testId}>
       <div className="mt-0.5 text-brass-300">{icon}</div>
       <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">{label}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">{label}</div>
         <div className={`truncate text-sm font-medium ${toneCls}`} title={value}>
           {value}
         </div>
-        {sub && <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-400">{sub}</div>}
+        {sub && <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-ink-400">{sub}</div>}
       </div>
     </div>
   )
@@ -82,7 +85,7 @@ function SpecScorecard() {
     <section aria-labelledby="specs-title">
       <div className="mb-3 flex items-center justify-between">
         <h3 id="specs-title" className="label-luxe">
-          Detected machine
+          Step 1 · This computer
         </h3>
         <button type="button" className="btn-ghost btn-sm" onClick={() => void runDetection()} disabled={detecting} data-testid="rescan-specs">
           <RefreshCw className={`h-3.5 w-3.5 ${detecting ? 'animate-spin' : ''}`} /> Re-scan
@@ -90,20 +93,20 @@ function SpecScorecard() {
       </div>
       <div className="grid grid-cols-2 gap-2.5" data-testid="spec-scorecard">
         <SpecTile testId="spec-os" icon={<Monitor className="h-4 w-4" />} label="Operating system" value={specs ? specs.os.label : 'Detecting…'} sub={specs ? `${specs.browser.name} ${specs.browser.version}${specs.os.version ? ` · v${specs.os.version}` : ''}` : undefined} />
-        <SpecTile testId="spec-cpu" icon={<Cpu className="h-4 w-4" />} label="CPU cores" value={specs?.cpu.logicalCores != null ? `${specs.cpu.logicalCores} logical cores` : '—'} sub={specs ? `Architecture: ${specs.os.arch}` : undefined} />
+        <SpecTile testId="spec-cpu" icon={<Cpu className="h-4 w-4" />} label="Processor" value={specs?.cpu.logicalCores != null ? `${specs.cpu.logicalCores} logical cores` : '—'} sub={specs ? `Architecture: ${specs.os.arch}` : undefined} />
         <SpecTile
           testId="spec-gpu"
           icon={<Gpu className="h-4 w-4" />}
-          label="GPU renderer"
+          label="Graphics"
           value={specs?.gpu.model ?? specs?.webgpu.description ?? 'Not exposed by browser'}
           sub={specs ? `${specs.gpu.gpuClass.replace('-', ' ')}${specs.webgl.version ? ` · ${specs.webgl.version}` : ''}` : undefined}
         />
-        <SpecTile testId="spec-ram" icon={<MemoryStick className="h-4 w-4" />} label="Estimated RAM" value={ram} sub={specs?.memory.capped ? 'Browsers cap reported RAM at 8 GB — override if higher.' : undefined} />
-        <SpecTile testId="spec-vram" icon={<Gpu className="h-4 w-4" />} label="Estimated VRAM" value={vram} sub={specs?.webgpu.maxBufferSizeGB != null ? `WebGPU max buffer ${specs.webgpu.maxBufferSizeGB} GB` : undefined} />
+        <SpecTile testId="spec-ram" icon={<MemoryStick className="h-4 w-4" />} label="Memory (RAM)" value={ram} sub={specs?.memory.capped ? 'Browsers cap reported RAM at 8 GB — override if higher.' : undefined} />
+        <SpecTile testId="spec-vram" icon={<Gpu className="h-4 w-4" />} label="Graphics memory" value={vram} sub={specs?.webgpu.maxBufferSizeGB != null ? `WebGPU max buffer ${specs.webgpu.maxBufferSizeGB} GB` : undefined} />
         <SpecTile
           testId="spec-storage"
           icon={<HardDrive className="h-4 w-4" />}
-          label="Free storage"
+          label="Space for AI models"
           value={specs?.storage.freeGB != null ? `${specs.storage.freeGB} GB available` : 'Unknown'}
           tone={specs?.storage.freeGB != null && specs.storage.freeGB < 8 ? 'warn' : 'default'}
           sub={specs?.storage.quotaGB != null ? `Browser quota ${specs.storage.quotaGB} GB${specs.storage.persisted ? ' · persistent' : ''}` : undefined}
@@ -112,7 +115,7 @@ function SpecScorecard() {
           <SpecTile
             testId="spec-webgpu"
             icon={<Zap className="h-4 w-4" />}
-            label="WebGPU support"
+            label="In-browser AI (WebGPU)"
             value={!specs ? '—' : specs.webgpu.adapterAvailable ? `Supported${specs.webgpu.shaderF16 ? ' · shader-f16' : ' · f32 only'}` : 'Not available'}
             tone={specs?.webgpu.adapterAvailable ? 'good' : 'warn'}
             sub={specs ? (specs.webgpu.adapterAvailable ? [specs.webgpu.vendor, specs.webgpu.architecture].filter(Boolean).join(' · ') || 'Adapter ready' : (specs.webgpu.error ?? 'Use Chrome or Edge 113+ for the browser engine.')) : undefined}
@@ -122,7 +125,7 @@ function SpecScorecard() {
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <label className="text-xs text-ink-300">
-          RAM override
+          Actual RAM (if more than shown)
           <select
             className="input mt-1"
             data-testid="override-ram"
@@ -138,7 +141,7 @@ function SpecScorecard() {
           </select>
         </label>
         <label className="text-xs text-ink-300">
-          VRAM override
+          Graphics memory (if known)
           <select
             className="input mt-1"
             data-testid="override-vram"
@@ -173,7 +176,11 @@ function PerformanceSettingsPanel() {
       </h3>
       <div className="panel-raised p-4">
         <Toggle id="toggle-recommended" checked={applied} onChange={setApplied} label="Apply Recommended Performance Settings" />
-        <p className="mt-1 pl-12 text-[11px] text-ink-400">Temperature 0.25 for technical precision, plus the tier’s context window, max tokens and image tiling resolution.</p>
+        <p className="mt-1 pl-12 text-xs text-ink-400">Best for most people: precise, technical wording (temperature 0.25) and memory limits tuned to this computer.</p>
+        <details className="group mt-3">
+          <summary className="cursor-pointer select-none pl-12 text-xs font-medium text-brass-300 hover:text-brass-200" data-testid="fine-tune">
+            Fine-tune settings (advanced)
+          </summary>
         <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-ink-300" data-testid="perf-settings">
           <label>
             Temperature
@@ -234,6 +241,7 @@ function PerformanceSettingsPanel() {
             <Toggle id="toggle-tiling" checked={settings.highDetailTiling} onChange={(v) => setSettings({ highDetailTiling: v })} label={<span className="text-xs">High-detail shop-drawing tiles</span>} />
           </div>
         </div>
+        </details>
       </div>
     </section>
   )
@@ -290,18 +298,30 @@ function TierCards() {
   )
 }
 
+const ROLE_VISION = 'Image analysis'
+const ROLE_TEXT = 'Writing & translation'
+const ROLE_BOTH = 'Images, writing & translation'
+
 function ModelRow({ model, installed, role }: { model: CatalogModel | { id: string; label: string; approxDownloadGB: number; vision: boolean }; installed: boolean; role: string }) {
+  // A primitive string keeps this selector stable between progress ticks of other models.
+  const progress = useRuntimeStore((s) => {
+    const d = Object.values(s.downloads).find((x) => x.model === model.id)
+    if (!d || ['completed', 'cancelled', 'idle'].includes(d.status)) return ''
+    const pct = Math.round(d.fraction * 100)
+    return d.status === 'paused' ? `Paused at ${pct}%` : d.status === 'error' ? 'Download stopped' : d.status === 'loading' ? 'Loading onto GPU' : `Downloading ${pct}%`
+  })
+  const state = installed ? 'Installed' : progress || 'Not downloaded'
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2">
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-ink-400">{role}</div>
+        <div className="text-[11px] uppercase tracking-wider text-ink-400">{role}</div>
         <div className="truncate text-sm text-ink-100">
           {model.label} <span className="font-mono text-[11px] text-ink-400">{model.id}</span>
         </div>
       </div>
-      <div className="shrink-0 text-right text-[11px]">
+      <div className="shrink-0 text-right text-xs">
         <div className="text-ink-300 tabular">≈ {model.approxDownloadGB.toFixed(1)} GB</div>
-        <div className={installed ? 'text-verdigris-300' : 'text-amberglow-400'}>{installed ? 'Installed' : 'Not downloaded'}</div>
+        <div className={`tabular ${installed ? 'text-verdigris-300' : progress ? 'text-brass-200' : 'text-amberglow-400'}`}>{state}</div>
       </div>
     </div>
   )
@@ -316,14 +336,22 @@ function EnginePanel({ engine }: { engine: EngineKind }) {
   const p = rec.profile
 
   if (engine === 'ollama') {
-    const models = p.ollama.vision.id === p.ollama.text.id ? [{ role: 'Vision + drafting', m: p.ollama.vision }] : [{ role: 'Vision', m: p.ollama.vision }, { role: 'Drafting', m: p.ollama.text }]
+    const models = p.ollama.vision.id === p.ollama.text.id ? [{ role: ROLE_BOTH, m: p.ollama.vision }] : [{ role: ROLE_VISION, m: p.ollama.vision }, { role: ROLE_TEXT, m: p.ollama.text }]
     return (
       <div className="space-y-3" data-testid="engine-panel-ollama">
         <div className="flex items-center gap-2 text-sm" data-testid="ollama-status">
           <span className={`h-2 w-2 rounded-full ${ollama?.reachable ? 'bg-verdigris-400' : 'bg-ember-400'}`} />
           {ollama == null ? 'Checking for Ollama…' : ollama.reachable ? `Ollama ${ollama.version ?? ''} running · ${ollama.models.length} model(s) installed` : 'Ollama not detected'}
         </div>
-        {ollama && !ollama.reachable && <p className="text-xs text-ink-400">{ollama.error} Download Ollama from ollama.com (macOS &amp; Windows).</p>}
+        {ollama && !ollama.reachable && (
+          <p className="text-xs leading-relaxed text-ink-400">
+            Ollama is a free app for Mac and Windows that runs the AI on this computer. Install it from{' '}
+            <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="text-brass-300 underline-offset-2 hover:underline">
+              ollama.com/download
+            </a>
+            , open it, then press Re-check — the required models then download automatically.
+          </p>
+        )}
         <div className="flex gap-2">
           <input
             className="input font-mono text-xs"
@@ -347,7 +375,7 @@ function EnginePanel({ engine }: { engine: EngineKind }) {
     const ok = s.specs?.webgpu.adapterAvailable
     const text = { ...p.webllm.text, id: webllmVariant(p.webllm.text.id, rec.webllmPrecision) }
     const vision = p.webllm.vision ? { ...p.webllm.vision, id: webllmVariant(p.webllm.vision.id, rec.webllmPrecision) } : null
-    const rows = vision && vision.id === text.id ? [{ role: 'Vision + drafting', m: vision }] : [...(vision ? [{ role: 'Vision', m: vision }] : []), { role: 'Drafting', m: text }]
+    const rows = vision && vision.id === text.id ? [{ role: ROLE_BOTH, m: vision }] : [...(vision ? [{ role: ROLE_VISION, m: vision }] : []), { role: ROLE_TEXT, m: text }]
     return (
       <div className="space-y-3" data-testid="engine-panel-webllm">
         <div className="flex items-center gap-2 text-sm">
@@ -426,7 +454,7 @@ function DownloadRow({ id, p }: { id: string; p: DownloadProgress }) {
         <div className="min-w-0">
           <div className="truncate text-sm text-ink-100">{p.model}</div>
           <div className="text-[11px] text-ink-400">
-            {p.engine === 'ollama' ? 'Ollama' : 'Browser WebGPU'} · <span data-testid="download-status">{STATUS_LABEL[p.status]}</span>
+            {p.engine === 'ollama' ? 'Ollama' : 'In this browser'} · <span data-testid="download-status">{STATUS_LABEL[p.status]}</span>
           </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
@@ -494,14 +522,14 @@ function BindingSelect({ role }: { role: 'vision' | 'text' }) {
   }, [ollama, cached, engine.cloudApiKey, engine.cloudModel, binding])
   return (
     <label className="block text-xs text-ink-300">
-      {role === 'vision' ? 'Vision model (image analysis)' : 'Drafting model (interview + brief)'}
+      {role === 'vision' ? 'Image analysis model' : 'Writing & translation model'}
       <select
         className="input mt-1"
         data-testid={`binding-${role}`}
         value={binding ? `${binding.engine}|${binding.model}` : ''}
         onChange={(e) => bindModel(role, options.find((o) => o.value === e.target.value)?.b ?? null)}
       >
-        <option value="">{role === 'vision' ? 'None — on-device pixel analysis' : 'None — deterministic composer'}</option>
+        <option value="">{role === 'vision' ? 'None — built-in pixel analysis' : 'None — built-in brief writer'}</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -509,6 +537,208 @@ function BindingSelect({ role }: { role: 'vision' | 'text' }) {
         ))}
       </select>
     </label>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Plain-language status + automatic download                          */
+/* ------------------------------------------------------------------ */
+
+type HeroState = 'checking' | 'downloading' | 'paused' | 'tier-choice' | 'error' | 'ready' | 'off' | 'no-engine' | 'blocked' | 'cloud' | 'pending'
+
+const ACTIVE = ['preparing', 'downloading', 'verifying', 'loading']
+
+function SetupStatusHero({ onStart, onDownload }: { onStart: () => void; onDownload: () => void }) {
+  const s = useProjectStore(
+    useShallow((st) => ({
+      specs: st.specs,
+      autoDownload: st.autoDownload,
+      setAutoDownload: st.setAutoDownload,
+      vision: st.engine.vision,
+      text: st.engine.text,
+      cloudKey: st.engine.cloudApiKey,
+      refreshEngines: st.refreshEngines,
+      pause: st.pauseDownload,
+      resume: st.resumeDownload,
+      setTierOverride: st.setTierOverride,
+    })),
+  )
+  const tierName = useProjectStore((st) => selectRecommendation(st).profile.name)
+  const r = useRuntimeStore(
+    useShallow((rt) => ({ ollama: rt.ollama, cached: rt.webllmCached, downloads: rt.downloads, queue: rt.downloadQueue, reason: rt.autoDownloadReason, checking: rt.checkingOllama })),
+  )
+  const ready = (b: ModelBinding | null) =>
+    !b ? false : b.engine === 'ollama' ? ollamaHasModel(r.ollama, b.model) : b.engine === 'webllm' ? Boolean(r.cached[b.model]) : s.cloudKey.trim().length > 0
+  const writer = s.text ?? s.vision
+  const entries = Object.entries(r.downloads)
+  const active = entries.find(([, d]) => ACTIVE.includes(d.status))
+  const paused = entries.find(([, d]) => d.status === 'paused')
+  const failed = entries.find(([, d]) => d.status === 'error')
+
+  let state: HeroState
+  if (!s.specs || r.ollama == null) state = 'checking'
+  else if (active) state = 'downloading'
+  else if (paused) state = 'paused'
+  else if (r.reason === 'tier-choice') state = 'tier-choice'
+  else if (writer && ready(writer)) state = 'ready'
+  else if (failed) state = 'error'
+  else if (!s.autoDownload) state = 'off'
+  else if (r.reason === 'no-engine') state = 'no-engine'
+  else if (r.reason === 'offline' || r.reason === 'save-data' || r.reason === 'storage') state = 'blocked'
+  else if (r.reason === 'cloud') state = 'cloud'
+  else state = 'pending'
+
+  const engineName = (b: ModelBinding) => (b.engine === 'ollama' ? 'Ollama' : b.engine === 'webllm' ? 'this browser' : 'Claude cloud')
+  const tone = state === 'ready' ? 'border-verdigris-500/50 bg-verdigris-500/10' : state === 'error' || state === 'no-engine' || state === 'blocked' ? 'border-amberglow-400/50 bg-amberglow-400/5' : 'border-brass-500/40 bg-brass-500/10'
+  const icon =
+    state === 'ready' ? (
+      <CircleCheck className="h-6 w-6 text-verdigris-300" />
+    ) : state === 'checking' || state === 'downloading' || state === 'pending' ? (
+      <LoaderCircle className="h-6 w-6 animate-spin text-brass-300" />
+    ) : state === 'paused' ? (
+      <Pause className="h-6 w-6 text-brass-300" />
+    ) : (
+      <CircleAlert className="h-6 w-6 text-amberglow-400" />
+    )
+
+  let title = ''
+  let body: ReactNode = null
+  let actions: ReactNode = null
+  let progress: number | null = null
+  if (state === 'checking') {
+    title = 'Checking this computer…'
+    body = 'Looking at the processor, graphics and memory to choose the right AI, and checking whether Ollama is installed.'
+  } else if (state === 'downloading' && active) {
+    const [key, d] = active
+    const pct = Math.round(d.fraction * 1000) / 10
+    progress = d.fraction
+    title = d.status === 'loading' ? 'Preparing the AI on your graphics card…' : 'Installing your AI models automatically'
+    body = (
+      <>
+        <span className="text-ink-100">{d.model}</span>
+        {d.status === 'loading' ? ' — almost done.' : ` — ${pct.toFixed(1)}%${d.bytesTotal ? ` · ${formatBytes(d.bytesDone)} of ${formatBytes(d.bytesTotal)}` : ''}${d.status === 'downloading' && d.bytesPerSecond > 0 ? ` · ${formatSpeed(d.bytesPerSecond)} · about ${formatEta(d.bytesTotal - d.bytesDone, d.bytesPerSecond)} left` : ''}.`}
+        {r.queue.length > 0 && <> Then: {r.queue.map((k) => k.split(':').slice(1).join(':')).join(', ')}.</>}
+        <span className="mt-1 block text-ink-400">You can close this window and start the brief — the download keeps going in the background.</span>
+      </>
+    )
+    if (d.status === 'downloading' || d.status === 'preparing')
+      actions = (
+        <button type="button" className="btn-secondary btn-sm" onClick={() => s.pause(key)}>
+          <Pause className="h-3.5 w-3.5" /> Pause
+        </button>
+      )
+  } else if (state === 'paused' && paused) {
+    const [key, d] = paused
+    progress = d.fraction
+    title = 'Download paused'
+    body = `${d.model} is paused at ${Math.round(d.fraction * 100)}%. Resume to continue from where it stopped.`
+    actions = (
+      <button type="button" className="btn-primary btn-sm" onClick={() => s.resume(key)}>
+        <Play className="h-3.5 w-3.5" /> Resume
+      </button>
+    )
+  } else if (state === 'tier-choice') {
+    title = `Download the ${tierName.replace(' Tier', '')} models?`
+    body = 'You picked a different tier than the one recommended for this computer. Its models download when you confirm — or go back to the recommendation.'
+    actions = (
+      <>
+        <button type="button" className="btn-primary btn-sm" onClick={onDownload} data-testid="status-download-tier">
+          <Download className="h-3.5 w-3.5" /> Download now
+        </button>
+        <button type="button" className="btn-secondary btn-sm" onClick={() => s.setTierOverride(null)}>
+          Use recommended
+        </button>
+      </>
+    )
+  } else if (state === 'error' && failed) {
+    const [key, d] = failed
+    title = 'The download stopped'
+    body = `${d.model}: ${d.error ?? 'download failed'}`
+    actions = (
+      <button type="button" className="btn-primary btn-sm" onClick={() => s.resume(key)}>
+        <RefreshCw className="h-3.5 w-3.5" /> Try again
+      </button>
+    )
+  } else if (state === 'ready' && writer) {
+    title = 'Your AI assistant is ready'
+    body = (
+      <>
+        Image analysis: <span className="text-ink-100">{s.vision?.vision && ready(s.vision) ? `${s.vision.model} (${engineName(s.vision)})` : 'built-in pixel analysis'}</span> · Writing &amp; Tagalog
+        translation: <span className="text-ink-100">{`${writer.model} (${engineName(writer)})`}</span>
+      </>
+    )
+    actions = (
+      <button type="button" className="btn-primary btn-sm" onClick={onStart} data-testid="status-start">
+        Start the brief <ArrowRight className="h-3.5 w-3.5" />
+      </button>
+    )
+  } else if (state === 'off') {
+    title = 'Automatic download is off'
+    body = 'Turn it on to install the models this computer needs, or use the 1-click button below.'
+    actions = (
+      <button type="button" className="btn-primary btn-sm" onClick={() => s.setAutoDownload(true)} data-testid="status-enable-auto">
+        <Download className="h-3.5 w-3.5" /> Turn on &amp; download
+      </button>
+    )
+  } else if (state === 'no-engine') {
+    title = 'Install Ollama to run the AI on this computer'
+    body = (
+      <>
+        Ollama is a free app for Mac and Windows. Once it is open, this app finds it and downloads the right models automatically — nothing else to do.
+        {!s.specs?.webgpu.adapterAvailable && ' (This browser cannot run the AI by itself, so Ollama — or Claude cloud with an API key — is needed.)'}
+      </>
+    )
+    actions = (
+      <>
+        <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="btn-primary btn-sm">
+          <Download className="h-3.5 w-3.5" /> Get Ollama
+        </a>
+        <button type="button" className="btn-secondary btn-sm" onClick={() => void s.refreshEngines()} data-testid="status-recheck">
+          <RefreshCw className={`h-3.5 w-3.5 ${r.checking ? 'animate-spin' : ''}`} /> Check again
+        </button>
+      </>
+    )
+  } else if (state === 'blocked') {
+    title = r.reason === 'offline' ? 'Waiting for an internet connection' : r.reason === 'save-data' ? 'Data Saver is on' : 'Not enough free storage'
+    body =
+      r.reason === 'offline'
+        ? 'The models download automatically as soon as this computer is back online.'
+        : r.reason === 'save-data'
+          ? 'Large downloads do not start by themselves on a Data-Saver connection. Use the 1-click button below when you are ready.'
+          : 'The browser does not have enough free space for these models. Free up disk space, or install Ollama instead.'
+  } else if (state === 'cloud') {
+    title = 'Claude cloud is selected'
+    body = 'Add your Anthropic API key below. Nothing needs to be downloaded.'
+  } else {
+    title = 'Getting the AI ready…'
+    body = 'Choosing and preparing the right models for this computer.'
+  }
+
+  return (
+    // Fixed minimum height: switching between states never moves the content below (no layout shift).
+    <section className={`flex min-h-[152px] items-center rounded-2xl border p-4 ${tone}`} data-testid="setup-status" data-state={state} aria-live="polite">
+      <div className="flex w-full flex-wrap items-start gap-4">
+        <div className="mt-0.5 shrink-0">{icon}</div>
+        <div className="min-w-0 flex-1">
+          <h3 className="heading-display text-lg" data-testid="setup-status-title">
+            {title}
+          </h3>
+          <p className="mt-0.5 text-sm leading-relaxed text-ink-300 tabular">{body}</p>
+          {progress != null && <ProgressBar value={progress} label="Model download progress" className="mt-3" />}
+        </div>
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      </div>
+    </section>
+  )
+}
+
+function AutoDownloadToggle() {
+  const { on, setOn } = useProjectStore(useShallow((s) => ({ on: s.autoDownload, setOn: s.setAutoDownload })))
+  return (
+    <div className="mt-4 rounded-xl border border-ink-700 bg-ink-900/60 p-3">
+      <Toggle id="toggle-auto-download" checked={on} onChange={setOn} label="Download the required AI models automatically" />
+      <p className="mt-1 pl-12 text-xs text-ink-400">Starts as soon as this computer has been checked, one model at a time, in the background.</p>
+    </div>
   )
 }
 
@@ -532,7 +762,8 @@ export function HardwareSetupModal() {
   const [tab, setTab] = useState<EngineKind | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  const autoTab: EngineKind = preferred ?? (ollamaReachable ? 'ollama' : specs?.webgpu.adapterAvailable ? 'webllm' : 'cloud')
+  // With no engine available yet, show Ollama (with its install steps) rather than the paid cloud option.
+  const autoTab: EngineKind = preferred ?? (ollamaReachable ? 'ollama' : specs?.webgpu.adapterAvailable ? 'webllm' : 'ollama')
   const activeTab = tab ?? autoTab
 
   useEffect(() => {
@@ -560,9 +791,9 @@ export function HardwareSetupModal() {
   if (!open) return null
 
   const tabs: Array<{ id: EngineKind; label: string; icon: ReactNode }> = [
-    { id: 'ollama', label: 'Local Ollama', icon: <Server className="h-4 w-4" /> },
-    { id: 'webllm', label: 'Browser WebGPU', icon: <Zap className="h-4 w-4" /> },
-    { id: 'cloud', label: 'Cloud fallback', icon: <Cloud className="h-4 w-4" /> },
+    { id: 'ollama', label: 'Ollama on this computer', icon: <Server className="h-4 w-4" /> },
+    { id: 'webllm', label: 'In this browser', icon: <Zap className="h-4 w-4" /> },
+    { id: 'cloud', label: 'Claude cloud', icon: <Cloud className="h-4 w-4" /> },
   ]
 
   return (
@@ -586,7 +817,7 @@ export function HardwareSetupModal() {
               <h2 id="setup-title" className="heading-display text-xl">
                 Setup &amp; Model Download
               </h2>
-              <p className="text-xs text-ink-400">Automated hardware &amp; GPU detection for Mac and Windows, with a 1-click local AI installer.</p>
+              <p className="text-xs text-ink-400">We check this computer (Mac or Windows), choose the right AI for it and install it for you — automatically.</p>
             </div>
           </div>
           <button type="button" className="btn-ghost btn-sm" onClick={close} aria-label="Close setup" data-testid="close-setup">
@@ -594,7 +825,9 @@ export function HardwareSetupModal() {
           </button>
         </div>
 
-        <div className="grid flex-1 gap-6 overflow-y-auto px-6 py-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <SetupStatusHero onStart={close} onDownload={() => void applyAndDownload(activeTab)} />
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
           <div>
             <SpecScorecard />
             <PerformanceSettingsPanel />
@@ -605,7 +838,7 @@ export function HardwareSetupModal() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 id="rec-title" className="label-luxe">
-                    Recommended model &amp; optimal settings
+                    Step 2 · Recommended AI for this computer
                   </h3>
                   <div className="heading-display mt-1 text-lg" data-testid="recommended-tier">
                     {rec.profile.name}
@@ -629,7 +862,8 @@ export function HardwareSetupModal() {
             </section>
 
             <div className="mt-5">
-              <div className="flex gap-1 rounded-xl border border-ink-700 bg-ink-950/60 p-1" role="tablist" aria-label="Engine">
+              <h3 className="label-luxe mb-3">Step 3 · Where the AI runs</h3>
+              <div className="flex gap-1 rounded-xl border border-ink-700 bg-ink-950/60 p-1" role="tablist" aria-label="Where the AI runs">
                 {tabs.map((t) => (
                   <button
                     key={t.id}
@@ -650,6 +884,7 @@ export function HardwareSetupModal() {
               </div>
             </div>
 
+            <AutoDownloadToggle />
             <button type="button" className="btn-primary mt-4 w-full py-3 text-[15px]" disabled={busy} onClick={() => void applyAndDownload(activeTab)} data-testid="one-click-download">
               {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : activeTab === 'cloud' ? <Sparkles className="h-4 w-4" /> : <Download className="h-4 w-4" />}
               {activeTab === 'cloud' ? '1-Click Apply Cloud Fallback' : '1-Click Apply & Download Best Model'}
@@ -657,17 +892,18 @@ export function HardwareSetupModal() {
             <DownloadPanel />
 
             <details className="mt-5 rounded-xl border border-ink-700 bg-ink-900/50 p-4">
-              <summary className="cursor-pointer text-sm text-ink-200">Active model bindings (advanced)</summary>
+              <summary className="cursor-pointer text-sm text-ink-200">Choose models by hand (advanced)</summary>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <BindingSelect role="vision" />
                 <BindingSelect role="text" />
               </div>
             </details>
           </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-ink-700 px-6 py-3">
-          <p className="text-[11px] text-ink-400">Re-open anytime from “Setup &amp; Model Download” in the top bar. Downloads continue in the background.</p>
+          <p className="text-xs text-ink-400">Re-open any time from “Setup &amp; Model Download” in the top bar. Downloads keep going in the background.</p>
           <button type="button" className="btn-primary" onClick={close} data-testid="finish-setup">
             Done — start the brief
           </button>

@@ -22,9 +22,24 @@ const BENIGN = [
 type Fixtures = {
   mock: MockOllama
   consoleErrors: string[]
+  /** Opt-in (spec 06): talk to the real Ollama on localhost:11434 instead of refusing it. */
+  realOllama: boolean
 }
 
 export const test = base.extend<Fixtures>({
+  realOllama: [false, { option: true }],
+  /*
+   * Hermetic AI environment. The app downloads required models automatically, so every test:
+   *  - refuses the real Ollama on localhost:11434 (tests opt in to the mock server explicitly), and
+   *  - hides WebGPU, so the in-browser engine never streams real model weights from Hugging Face.
+   */
+  context: async ({ context, realOllama }, use) => {
+    if (!realOllama) await context.route('http://localhost:11434/**', (route) => route.abort('connectionrefused'))
+    await context.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined })
+    })
+    await use(context)
+  },
   mock: async ({}, use) => {
     const mock = await startMockOllama()
     await use(mock)
@@ -57,15 +72,15 @@ export async function connectMockOllama(page: Page, mock: MockOllama): Promise<v
   await expect(page.getByTestId('ollama-status')).toContainText('0.40.13-mock running')
 }
 
-/** 1-click install of the recommended Ollama models through the mock server (fast pull). */
+/** Connect the mock Ollama; the required models then download automatically (fast pull). */
 export async function installMockModels(page: Page, mock: MockOllama): Promise<void> {
   mock.pullTicks = 4
   mock.pullTickMs = 25
   await connectMockOllama(page, mock)
-  await page.getByTestId('one-click-download').click()
   await expect(page.getByTestId('download-row')).toHaveCount(2, { timeout: 30_000 })
   await expect(page.locator('[data-testid="download-row"][data-status="completed"]')).toHaveCount(2, { timeout: 30_000 })
   await expect(page.getByTestId('engine-status')).toContainText('moondream:latest')
+  await expect(page.getByTestId('setup-status')).toHaveAttribute('data-state', 'ready')
 }
 
 export async function closeWizard(page: Page): Promise<void> {

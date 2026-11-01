@@ -259,6 +259,29 @@ export interface InterviewAnswer {
 }
 
 /* ------------------------------------------------------------------ */
+/* Tagalog → English translation                                       */
+/* ------------------------------------------------------------------ */
+
+/** A form field Philippe typed in Tagalog that was replaced by its English translation. */
+export interface FieldTranslation {
+  /** Exactly what was typed (restored by "Undo"). */
+  original: string
+  /** The English text written back into the field. */
+  english: string
+  method: 'model' | 'phrasebook'
+  model: string | null
+  /** Numbers or Tagalog words may not have survived — worth a second look. */
+  review: boolean
+  at: string
+}
+
+export type TranslationStatus =
+  | { state: 'translating'; model: string }
+  | { state: 'waiting-model'; model: string }
+  | { state: 'no-model' }
+  | { state: 'error'; error: string }
+
+/* ------------------------------------------------------------------ */
 /* Design vocabulary                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -294,6 +317,7 @@ export type ComplianceCheckId =
   | 'essential-criteria'
   | 'precedents-where-when'
   | 'structure'
+  | 'english-only'
 
 export interface ComplianceIssue {
   message: string

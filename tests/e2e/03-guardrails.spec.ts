@@ -35,7 +35,7 @@ test.describe('Guardrails, gating & the deterministic (no-model) path', () => {
     await page.getByTestId('generate-brief').click()
     await expect(page.getByTestId('section-count')).toHaveText(/9\/9 sections/)
     await page.getByTestId('to-review').click()
-    await expect(page.getByTestId('compliance-score')).toHaveText('7/7 passed')
+    await expect(page.getByTestId('compliance-score')).toHaveText('8/8 passed')
     await expect(page.getByTestId('approve-draft')).toBeEnabled()
 
     // --- Forbidden term: flagged live, sanitised with the chosen replacement ---
@@ -68,7 +68,7 @@ test.describe('Guardrails, gating & the deterministic (no-model) path', () => {
     await editor.fill((await editor.inputValue()).replace('**Site:**', '**Site:** The homeowner prefers oak. '))
     await expect(page.getByTestId('check-client-reference')).toHaveAttribute('data-passed', 'false')
     await page.getByTestId('fix-all').click()
-    await expect(page.getByTestId('compliance-score')).toHaveText('7/7 passed')
+    await expect(page.getByTestId('compliance-score')).toHaveText('8/8 passed')
     await expect(editor).toHaveValue(/The Client prefers oak/)
 
     await page.getByTestId('approve-draft').click()

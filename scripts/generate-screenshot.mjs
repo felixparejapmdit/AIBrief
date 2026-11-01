@@ -47,7 +47,7 @@ for (const [pillar, n] of Object.entries(pages)) {
 await page.getByTestId('step-3').click()
 await page.getByTestId('generate-brief').click()
 await page.getByTestId('to-review').click()
-await page.getByTestId('compliance-score').getByText('7/7 passed').waitFor()
+await page.getByTestId('compliance-score').getByText('8/8 passed').waitFor()
 const dismiss = page.getByRole('button', { name: 'Dismiss' })
 while (await dismiss.count()) await dismiss.first().click()
 await page.waitForTimeout(500)

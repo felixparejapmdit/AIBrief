@@ -1,10 +1,11 @@
 import { createStore, del, get as idbGet, set as idbSet } from 'idb-keyval'
 import { create } from 'zustand'
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware'
-import { ALL_QUESTIONS, PILLARS } from '../constants/interviewPillars'
+import { ALL_QUESTIONS, PILLARS, pillarById, questionPages } from '../constants/interviewPillars'
 import { DEFAULT_CLOUD_MODEL, HARDWARE_PROFILES, recommendProfile, webllmVariant } from '../constants/modelCatalog'
 import { formatBriefDate } from '../constants/vipSkillPrompt'
 import { analyzeImage, isAborted, suggestFollowUp } from '../services/aiClient'
+import { type DownloadTarget, planAutoDownload, targetKey } from '../services/autoDownload'
 import { draftBrief } from '../services/briefGenerator'
 import { detectMachineSpecs, requestPersistentStorage } from '../services/hardwareDetector'
 import {
@@ -15,6 +16,7 @@ import {
   isWebLlmModelCached,
   ollamaHasModel,
 } from '../services/modelDownloader'
+import { translateTagalogText, translateWithPhrasebook } from '../services/translator'
 import { webllmTransport } from '../services/webllmBridge'
 import type {
   Approval,
@@ -24,6 +26,7 @@ import type {
   DownloadProgress,
   EngineKind,
   EngineSettings,
+  FieldTranslation,
   HardwareOverrides,
   ImageCategory,
   IntakeImage,
@@ -37,8 +40,9 @@ import type {
   WorkflowStep,
 } from '../types/architecture'
 import { type BriefInputs, composeBrief } from '../utils/briefComposer'
-import { applyAllFixes, applyComplianceFix, auditBrief } from '../utils/complianceAuditor'
+import { applyAllFixes, applyComplianceFix, auditBrief, sanitizeForbiddenTerms } from '../utils/complianceAuditor'
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, guessCategory, processUpload } from '../utils/imageProcessing'
+import { type SegmentTranslation, containsTagalog, findTagalogLines, translateTagalogLines } from '../utils/tagalog'
 import { hashString, uid } from '../utils/text'
 import { downloadKey, useRuntimeStore } from './useRuntimeStore'
 
@@ -111,7 +115,10 @@ function isMilestone(next: PersistedData, prev: PersistedData | null): boolean {
     next.engine.vision !== prev.engine.vision ||
     next.engine.text !== prev.engine.text ||
     next.specs !== prev.specs ||
-    next.settings !== prev.settings
+    next.settings !== prev.settings ||
+    next.autoDownload !== prev.autoDownload ||
+    next.translations !== prev.translations ||
+    next.keptOriginal !== prev.keptOriginal
   )
 }
 
@@ -175,6 +182,10 @@ export interface PersistedData {
   engine: EngineSettings
   settings: PerformanceSettings
   recommendedApplied: boolean
+  /** Download the models the detected tier needs automatically (on by default). */
+  autoDownload: boolean
+  /** The user bound models by hand in "Advanced" — auto-download then keeps those instead. */
+  bindingsManual: boolean
   currentStep: WorkflowStep
   objective: string
   images: IntakeImage[]
@@ -187,6 +198,10 @@ export interface PersistedData {
   athleteReplacement: AthleteReplacement
   approval: Approval | null
   pageSize: 'Letter' | 'A4'
+  /** Field key → the Tagalog original and its English translation now in the field. */
+  translations: Record<string, FieldTranslation>
+  /** Field key → hash of text the user chose to keep as typed (not translated). */
+  keptOriginal: Record<string, string>
 }
 
 export interface ProjectState extends PersistedData {
@@ -201,6 +216,9 @@ export interface ProjectState extends PersistedData {
   setSettings: (patch: Partial<PerformanceSettings>) => void
   setRecommendedApplied: (on: boolean) => void
   refreshEngines: () => Promise<void>
+  setAutoDownload: (on: boolean) => void
+  /** Start any required model downloads (no-op when disabled, busy or everything is installed). */
+  ensureRequiredModels: () => void
   applyAndDownload: (kind: EngineKind) => Promise<void>
   startDownload: (engine: 'ollama' | 'webllm', model: string) => void
   pauseDownload: (key: string) => void
@@ -233,6 +251,15 @@ export interface ProjectState extends PersistedData {
   revokeApproval: () => void
   setPageSize: (size: 'Letter' | 'A4') => void
   resetProject: () => Promise<void>
+  /** Translate the Tagalog parts of one form field into English (queued; runs after typing ends). */
+  translateField: (key: string) => Promise<void>
+  /** Translate every field that still contains Tagalog (skips the field being typed in). */
+  translatePending: () => void
+  undoTranslation: (key: string) => void
+  keepAsTyped: (key: string) => void
+  retranslateField: (key: string) => void
+  /** Step 4: translate Tagalog lines of the brief itself. */
+  translateBriefTagalog: () => Promise<void>
 }
 
 const DEFAULT_ENGINE: EngineSettings = {
@@ -248,7 +275,10 @@ const EMPTY_BRIEF: BriefDraft = { markdown: '', generatedAt: null, generatedBy: 
 const defaultPageSize = (): 'Letter' | 'A4' =>
   typeof navigator !== 'undefined' && /^en-(US|CA)|^es-(MX|US)|^fil|^en-PH/i.test(navigator.language) ? 'Letter' : 'A4'
 
-const initialProject = (): Omit<PersistedData, 'setupCompleted' | 'specs' | 'overrides' | 'tierOverride' | 'preferredEngine' | 'engine' | 'settings' | 'recommendedApplied'> => ({
+const initialProject = (): Omit<
+  PersistedData,
+  'setupCompleted' | 'specs' | 'overrides' | 'tierOverride' | 'preferredEngine' | 'engine' | 'settings' | 'recommendedApplied' | 'autoDownload' | 'bindingsManual'
+> => ({
   currentStep: 1,
   objective: '',
   images: [],
@@ -261,6 +291,8 @@ const initialProject = (): Omit<PersistedData, 'setupCompleted' | 'specs' | 'ove
   athleteReplacement: 'guests',
   approval: null,
   pageSize: defaultPageSize(),
+  translations: {},
+  keptOriginal: {},
 })
 
 /* ------------------------------------------------------------------ */
@@ -326,6 +358,59 @@ export function buildBriefInputs(s: PersistedData): BriefInputs {
 }
 
 /* ------------------------------------------------------------------ */
+/* Translatable fields                                                 */
+/* "objective" · "answer:<questionId>" · "followup:<id>" · "image:<id>" */
+/* ------------------------------------------------------------------ */
+
+type FieldSource = Pick<PersistedData, 'objective' | 'answers' | 'followUps' | 'images'>
+
+export function readField(s: FieldSource, key: string): string | null {
+  if (key === 'objective') return s.objective
+  const sep = key.indexOf(':')
+  const kind = key.slice(0, sep)
+  const id = key.slice(sep + 1)
+  if (kind === 'answer') return s.answers[id]?.value ?? null
+  if (kind === 'followup') return s.followUps.find((f) => f.id === id)?.answer ?? null
+  if (kind === 'image') return s.images.find((im) => im.id === id)?.notes ?? null
+  return null
+}
+
+function fieldKeys(s: FieldSource): string[] {
+  return ['objective', ...Object.keys(s.answers).map((id) => `answer:${id}`), ...s.followUps.map((f) => `followup:${f.id}`), ...s.images.map((im) => `image:${im.id}`)]
+}
+
+/** Fields that still contain Tagalog (and that the user did not choose to keep as typed). */
+export function selectPendingTranslations(s: FieldSource & Pick<PersistedData, 'keptOriginal'>): string[] {
+  return fieldKeys(s).filter((key) => {
+    const value = readField(s, key)
+    return value != null && containsTagalog(value) && s.keptOriginal[key] !== hashString(value)
+  })
+}
+
+/** Human description of a field and where it lives, for "Go to" links. */
+export function describeField(s: FieldSource, key: string): { label: string; step: WorkflowStep; pillar: PillarId | null; page: number } {
+  if (key === 'objective') return { label: 'Core project objective', step: 1, pillar: null, page: 0 }
+  const id = key.slice(key.indexOf(':') + 1)
+  if (key.startsWith('answer:')) {
+    const q = ALL_QUESTIONS.find((x) => x.id === id)
+    const pillar = q ? pillarById(q.pillar) : null
+    const page = pillar ? Math.max(0, questionPages(pillar).findIndex((p) => p.some((x) => x.id === id))) : 0
+    return { label: q?.prompt ?? 'Interview answer', step: 2, pillar: q?.pillar ?? null, page }
+  }
+  if (key.startsWith('followup:')) {
+    const f = s.followUps.find((x) => x.id === id)
+    const pillar = f ? pillarById(f.pillar) : null
+    return { label: f ? `Follow-up: ${f.question}` : 'Follow-up answer', step: 2, pillar: f?.pillar ?? null, page: pillar ? questionPages(pillar).length - 1 : 0 }
+  }
+  const im = s.images.find((x) => x.id === id)
+  return { label: `Notes for ${im?.name ?? 'an image'}`, step: 1, pillar: null, page: 0 }
+}
+
+function isFieldFocused(key: string): boolean {
+  return typeof document !== 'undefined' && document.activeElement?.getAttribute('data-translate-key') === key
+}
+
+/* ------------------------------------------------------------------ */
 /* Module-level controllers                                            */
 /* ------------------------------------------------------------------ */
 
@@ -335,9 +420,32 @@ let analysisQueue: Promise<void> = Promise.resolve()
 let uploadQueue: Promise<void> = Promise.resolve()
 let generationController: AbortController | null = null
 let followUpController: AbortController | null = null
+/** Downloads auto-started this session, so a failing download is never retried in a loop. */
+const autoAttempted = new Set<string>()
+let autoToastShown = false
+let translationQueue: Promise<void> = Promise.resolve()
+const queuedTranslations = new Set<string>()
 
 const runtime = () => useRuntimeStore.getState()
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+const ACTIVE_DOWNLOAD = new Set<DownloadProgress['status']>(['preparing', 'downloading', 'verifying', 'loading', 'paused'])
+
+/** True when the bound model is installed and usable right now. */
+export function isBindingReady(b: ModelBinding | null, cloudKey: string): boolean {
+  if (!b) return false
+  if (b.engine === 'ollama') return ollamaHasModel(runtime().ollama, b.model)
+  if (b.engine === 'webllm') return Boolean(runtime().webllmCached[b.model])
+  return cloudKey.trim().length > 0
+}
+
+function catalogSizeGB(t: DownloadTarget): number {
+  for (const p of Object.values(HARDWARE_PROFILES)) {
+    for (const m of [p.ollama.vision, p.ollama.text, p.webllm.vision, p.webllm.text]) {
+      if (m && (m.id === t.model || webllmVariant(m.id, 'q4f32_1') === t.model)) return m.approxDownloadGB
+    }
+  }
+  return 2
+}
 
 function bindingsFor(kind: EngineKind, rec: Recommendation, s: PersistedData): { vision: ModelBinding | null; text: ModelBinding | null; downloads: Array<{ engine: 'ollama' | 'webllm'; model: string }> } {
   const p = rec.profile
@@ -405,6 +513,84 @@ export const useProjectStore = create<ProjectState>()(
         return analysisQueue
       }
 
+      /** Bind the recommended models for an engine and apply the tier's tuned settings. */
+      const configureEngine = (kind: EngineKind) => {
+        const s = get()
+        const rec = selectRecommendation(s)
+        const bindings = bindingsFor(kind, rec, s)
+        set({
+          preferredEngine: kind,
+          bindingsManual: false,
+          engine: { ...s.engine, vision: bindings.vision, text: bindings.text },
+          ...(s.recommendedApplied ? { settings: rec.profile.settings } : {}),
+        })
+        return bindings
+      }
+
+      /** Start the first download now and queue the rest — one at a time keeps bandwidth and memory in check. */
+      const queueDownloads = (targets: DownloadTarget[]) => {
+        const [first, ...rest] = targets
+        if (!first) return
+        runtime().set({ downloadQueue: rest.map((t) => downloadKey(t.engine, t.model)) })
+        get().startDownload(first.engine, first.model)
+      }
+
+      /* ---------------- Tagalog → English ---------------- */
+
+      const writeField = (key: string, value: string) => {
+        if (key === 'objective') return set({ objective: value })
+        const id = key.slice(key.indexOf(':') + 1)
+        if (key.startsWith('answer:')) return get().setAnswer(id, value)
+        if (key.startsWith('followup:')) return get().answerFollowUp(id, value)
+        if (key.startsWith('image:')) return get().updateImage(id, { notes: value })
+      }
+
+      const runFieldTranslation = async (key: string): Promise<void> => {
+        queuedTranslations.delete(key)
+        const setStatus = runtime().setTranslationStatus
+        const start = get()
+        const value = readField(start, key)
+        // Never rewrite a field while it is being typed in — it is translated when the user leaves it.
+        if (value == null || !containsTagalog(value) || start.keptOriginal[key] === hashString(value) || isFieldFocused(key)) {
+          setStatus(key, null)
+          return
+        }
+        const binding = start.engine.text ?? start.engine.vision
+        let result: SegmentTranslation | null
+        if (binding && isBindingReady(binding, start.engine.cloudApiKey)) {
+          setStatus(key, { state: 'translating', model: binding.model })
+          try {
+            result = await translateTagalogText(value, { binding, settings: start.settings, engine: start.engine })
+          } catch (err) {
+            setStatus(key, { state: 'error', error: errorText(err) })
+            return
+          }
+        } else {
+          // Short everyday answers ("Oo", "Wala pa po") are translated offline; anything longer needs the model.
+          result = await translateWithPhrasebook(value)
+          if (!result) {
+            setStatus(key, binding ? { state: 'waiting-model', model: binding.model } : { state: 'no-model' })
+            return
+          }
+        }
+        if (readField(get(), key) !== value) {
+          setStatus(key, null)
+          if (!isFieldFocused(key)) void get().translateField(key)
+          return
+        }
+        writeField(key, result.text)
+        const record: FieldTranslation = {
+          original: value,
+          english: result.text,
+          method: result.modelPieces ? 'model' : 'phrasebook',
+          model: result.modelPieces ? (binding?.model ?? null) : null,
+          review: result.review,
+          at: new Date().toISOString(),
+        }
+        set({ translations: { ...get().translations, [key]: record } })
+        setStatus(key, null)
+      }
+
       return {
         setupCompleted: false,
         specs: null,
@@ -414,6 +600,8 @@ export const useProjectStore = create<ProjectState>()(
         engine: DEFAULT_ENGINE,
         settings: HARDWARE_PROFILES.balanced.settings,
         recommendedApplied: true,
+        autoDownload: true,
+        bindingsManual: false,
         ...initialProject(),
         wizardOpen: false,
 
@@ -430,17 +618,21 @@ export const useProjectStore = create<ProjectState>()(
           } finally {
             runtime().set({ detecting: false })
           }
+          get().ensureRequiredModels()
         },
 
         setOverrides: (patch) => {
           const overrides = { ...get().overrides, ...patch }
           set({ overrides })
           if (get().recommendedApplied) set({ settings: selectRecommendation({ ...get(), overrides }).profile.settings })
+          // Corrected hardware information can change the required models.
+          get().ensureRequiredModels()
         },
 
         setTierOverride: (tier) => {
           set({ tierOverride: tier })
           if (get().recommendedApplied) set({ settings: selectRecommendation(get()).profile.settings })
+          get().ensureRequiredModels()
         },
 
         setPreferredEngine: (kind) => set({ preferredEngine: kind }),
@@ -466,11 +658,62 @@ export const useProjectStore = create<ProjectState>()(
             Promise.all([...webllmIds].map(async (id) => [id, await isWebLlmModelCached(id)] as const)),
           ])
           runtime().set({ ollama, checkingOllama: false, webllmCached: Object.fromEntries(cachedEntries) })
+          get().ensureRequiredModels()
+          // A model that just became ready picks up any Tagalog still waiting for translation.
+          get().translatePending()
+        },
+
+        setAutoDownload: (on) => {
+          set({ autoDownload: on })
+          if (on) {
+            autoAttempted.clear()
+            get().ensureRequiredModels()
+          } else runtime().set({ autoDownloadReason: 'disabled' })
+        },
+
+        ensureRequiredModels: () => {
+          const s = get()
+          const r = runtime()
+          const rec = selectRecommendation(s)
+          const connection = typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+          const plan = planAutoDownload({
+            enabled: s.autoDownload,
+            specs: s.specs,
+            ollama: r.ollama,
+            preferredEngine: s.preferredEngine,
+            bindingsManual: s.bindingsManual,
+            tierOverridden: s.tierOverride != null,
+            current: { vision: s.engine.vision, text: s.engine.text },
+            recommended: (kind) => bindingsFor(kind, rec, s),
+            webllmCached: r.webllmCached,
+            busy: Object.values(r.downloads).some((d) => ACTIVE_DOWNLOAD.has(d.status)),
+            attempted: autoAttempted,
+            online: r.online,
+            saveData: Boolean(connection?.saveData),
+            freeStorageGB: s.specs?.storage.freeGB ?? null,
+            sizeGB: catalogSizeGB,
+          })
+          const reason = plan.action === 'none' || plan.action === 'wait' ? plan.reason : plan.action === 'configure' ? plan.blocked : null
+          if (r.autoDownloadReason !== reason) r.set({ autoDownloadReason: reason })
+          if (plan.action === 'none' || plan.action === 'wait') return
+          const firstSetup = !s.engine.vision && !s.engine.text
+          if (plan.action === 'configure') configureEngine(plan.kind)
+          if (!plan.downloads.length) {
+            if (plan.action === 'configure' && firstSetup && !plan.blocked) r.toast('The AI models this computer needs are already installed — ready to go.', 'success')
+            return
+          }
+          for (const t of plan.downloads) autoAttempted.add(targetKey(t))
+          if (!autoToastShown) {
+            autoToastShown = true
+            const gb = plan.downloads.reduce((sum, t) => sum + catalogSizeGB(t), 0)
+            r.toast(`Downloading the AI models this computer needs (about ${gb.toFixed(1)} GB). It continues in the background.`, 'info')
+          }
+          if (plan.downloads.some((t) => t.engine === 'webllm')) void requestPersistentStorage()
+          queueDownloads(plan.downloads)
         },
 
         applyAndDownload: async (kind) => {
           const s = get()
-          const rec = selectRecommendation(s)
           if (kind === 'cloud' && !s.engine.cloudApiKey.trim()) {
             runtime().toast('Enter an Anthropic API key to use the cloud fallback.', 'warning')
             return
@@ -483,23 +726,17 @@ export const useProjectStore = create<ProjectState>()(
             runtime().toast('WebGPU is not available in this browser — use Ollama or the cloud fallback.', 'warning')
             return
           }
-          const { vision, text, downloads } = bindingsFor(kind, rec, s)
-          set({
-            preferredEngine: kind,
-            engine: { ...s.engine, vision, text },
-            ...(s.recommendedApplied ? { settings: rec.profile.settings } : {}),
-          })
+          const { downloads } = configureEngine(kind)
           if (downloads.length) await requestPersistentStorage()
           const missing = downloads.filter((d) =>
             d.engine === 'ollama' ? !ollamaHasModel(runtime().ollama, d.model) : !runtime().webllmCached[d.model],
           )
           if (!missing.length) {
             runtime().toast(kind === 'cloud' ? 'Cloud fallback configured.' : 'Recommended models are already installed — engine configured.', 'success')
+            get().translatePending()
             return
           }
-          const [first, ...rest] = missing
-          runtime().set({ downloadQueue: rest.map((d) => downloadKey(d.engine, d.model)) })
-          get().startDownload(first!.engine, first!.model)
+          queueDownloads(missing)
         },
 
         startDownload: (engine, model) => {
@@ -524,13 +761,22 @@ export const useProjectStore = create<ProjectState>()(
           runtime().set({ downloadQueue: [] })
           if (task) await task.cancel()
           tasks.delete(key)
+          // An explicit cancel is a clear "not now": stop downloading automatically until switched back on.
+          if (get().autoDownload) {
+            set({ autoDownload: false })
+            runtime().set({ autoDownloadReason: 'disabled' })
+            runtime().toast('Download cancelled. Automatic downloads are now off — switch them back on in Setup.', 'info')
+          }
           void get().refreshEngines()
         },
 
-        bindModel: (role, binding) => set({ engine: { ...get().engine, [role]: binding } }),
+        bindModel: (role, binding) => set({ engine: { ...get().engine, [role]: binding }, bindingsManual: true }),
 
         /* ---------------- Workflow ---------------- */
-        setStep: (step) => set({ currentStep: step }),
+        setStep: (step) => {
+          set({ currentStep: step })
+          get().translatePending()
+        },
         setObjective: (text) => set({ objective: text }),
 
         addFiles: (files, category) => {
@@ -672,6 +918,12 @@ export const useProjectStore = create<ProjectState>()(
         /* ---------------- Drafting & audit ---------------- */
         generateBrief: async () => {
           if (runtime().draft?.running) return
+          const pending = selectPendingTranslations(get())
+          if (pending.length) {
+            runtime().toast(`${pending.length} input${pending.length === 1 ? ' is' : 's are'} still in Tagalog — translate ${pending.length === 1 ? 'it' : 'them'} to English before drafting.`, 'warning')
+            get().translatePending()
+            return
+          }
           generationController = new AbortController()
           runtime().set({ draft: { running: true, section: 0, title: '', text: '', status: 'Preparing project context…', error: null } })
           try {
@@ -723,6 +975,10 @@ export const useProjectStore = create<ProjectState>()(
         },
 
         applyFix: (id) => {
+          if (id === 'english-only') {
+            void get().translateBriefTagalog()
+            return
+          }
           const s = get()
           const composed = composeBrief(buildBriefInputs(s))
           const next = applyComplianceFix(id, s.brief.markdown, { fallback: composed, replacement: s.athleteReplacement, date: formatBriefDate() })
@@ -733,6 +989,7 @@ export const useProjectStore = create<ProjectState>()(
           const s = get()
           const composed = composeBrief(buildBriefInputs(s))
           get().setBriefMarkdown(applyAllFixes(s.brief.markdown, { fallback: composed, replacement: s.athleteReplacement, date: formatBriefDate() }))
+          if (findTagalogLines(get().brief.markdown).length) void get().translateBriefTagalog()
         },
 
         setAthleteReplacement: (r) => set({ athleteReplacement: r }),
@@ -754,15 +1011,92 @@ export const useProjectStore = create<ProjectState>()(
           analysisController?.abort()
           await Promise.all(get().images.map((im) => del(im.id, imageDb)))
           set({ ...initialProject() })
-          runtime().set({ draft: null })
+          runtime().set({ draft: null, translationStatus: {} })
+        },
+
+        /* ---------------- Tagalog → English ---------------- */
+        translateField: (key) => {
+          if (queuedTranslations.has(key)) return translationQueue
+          queuedTranslations.add(key)
+          translationQueue = translationQueue.then(() => runFieldTranslation(key)).catch(() => undefined)
+          return translationQueue
+        },
+
+        translatePending: () => {
+          const s = get()
+          const statuses = runtime().translationStatus
+          for (const key of selectPendingTranslations(s)) {
+            // Our own output that still reads as Tagalog is left for the user to review, and a failed
+            // translation waits for "Try again" — neither is re-sent in a loop.
+            if (s.translations[key]?.english === readField(s, key) || statuses[key]?.state === 'error' || isFieldFocused(key)) continue
+            void get().translateField(key)
+          }
+        },
+
+        undoTranslation: (key) => {
+          const record = get().translations[key]
+          if (!record) return
+          writeField(key, record.original)
+          const translations = { ...get().translations }
+          delete translations[key]
+          set({ translations, keptOriginal: { ...get().keptOriginal, [key]: hashString(record.original) } })
+          runtime().setTranslationStatus(key, null)
+        },
+
+        keepAsTyped: (key) => {
+          const value = readField(get(), key)
+          if (value == null) return
+          set({ keptOriginal: { ...get().keptOriginal, [key]: hashString(value) } })
+          runtime().setTranslationStatus(key, null)
+        },
+
+        retranslateField: (key) => {
+          const keptOriginal = { ...get().keptOriginal }
+          delete keptOriginal[key]
+          set({ keptOriginal })
+          void get().translateField(key)
+        },
+
+        translateBriefTagalog: async () => {
+          const s = get()
+          const r = runtime()
+          if (r.briefTranslating || !findTagalogLines(s.brief.markdown).length) return
+          const binding = s.engine.text ?? s.engine.vision
+          if (!binding || !isBindingReady(binding, s.engine.cloudApiKey)) {
+            r.toast('Translating needs the AI model. Open Setup to install it, or rewrite those lines in English.', 'warning')
+            return
+          }
+          r.set({ briefTranslating: true })
+          const before = s.brief.markdown
+          try {
+            const opts = { binding, settings: s.settings, engine: s.engine }
+            const translated = await translateTagalogLines(before, async (text) => (await translateTagalogText(text, opts)).text)
+            if (get().brief.markdown !== before) {
+              r.toast('The brief was edited while translating — run “Translate to English” again.', 'warning')
+              return
+            }
+            get().setBriefMarkdown(sanitizeForbiddenTerms(translated, get().athleteReplacement).text)
+            r.toast('Tagalog passages translated to English.', 'success')
+          } catch (err) {
+            r.toast(`Translation failed: ${errorText(err)}`, 'error')
+          } finally {
+            runtime().set({ briefTranslating: false })
+          }
         },
       }
     },
     {
       name: STORAGE_KEY,
-      version: 1,
+      version: 2,
       storage: idbStorage,
       skipHydration: true,
+      // v2 added automatic downloads. Models bound before then are treated as the user's own choice,
+      // so auto-download never replaces them (1-Click Apply re-enables following the recommendation).
+      migrate: (persisted, version) => {
+        const state = persisted as PersistedData
+        if (version < 2) return { ...state, bindingsManual: Boolean(state.engine?.vision || state.engine?.text) }
+        return state
+      },
       partialize: (s): PersistedData => ({
         setupCompleted: s.setupCompleted,
         specs: s.specs,
@@ -785,6 +1119,10 @@ export const useProjectStore = create<ProjectState>()(
         athleteReplacement: s.athleteReplacement,
         approval: s.approval,
         pageSize: s.pageSize,
+        autoDownload: s.autoDownload,
+        bindingsManual: s.bindingsManual,
+        translations: s.translations,
+        keptOriginal: s.keptOriginal,
       }),
     },
   ),

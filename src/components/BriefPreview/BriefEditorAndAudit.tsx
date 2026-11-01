@@ -6,6 +6,7 @@ import {
   Columns2,
   Eye,
   FileText,
+  Languages,
   LoaderCircle,
   LockOpen,
   PenLine,
@@ -20,7 +21,8 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { BRIEF_SECTIONS } from '../../constants/vipSkillPrompt'
 import { describeBinding } from '../../services/aiClient'
-import { selectIntakeStatus, selectInterviewProgress, selectIsApproved, useProjectStore } from '../../store/useProjectStore'
+import { useDebounced } from '../../hooks/useDebounced'
+import { describeField, selectIntakeStatus, selectInterviewProgress, selectIsApproved, selectPendingTranslations, useProjectStore } from '../../store/useProjectStore'
 import { useRuntimeStore } from '../../store/useRuntimeStore'
 import type { AthleteReplacement, ComplianceCheck, ComplianceReport } from '../../types/architecture'
 import { auditBrief, countSections } from '../../utils/complianceAuditor'
@@ -42,15 +44,63 @@ function useReadiness() {
   )
 }
 
-/** Trails `value` by `ms` while it keeps changing (e.g. during typing); the first value is immediate. */
-function useDebounced<T>(value: T, ms: number): T {
-  const [settled, setSettled] = useState(value)
-  useEffect(() => {
-    if (Object.is(settled, value)) return
-    const t = window.setTimeout(() => setSettled(value), ms)
-    return () => window.clearTimeout(t)
-  }, [value, settled, ms])
-  return settled
+/** Inputs that still contain Tagalog, with what is happening to each and a way to reach it. */
+function PendingTranslations({ keys }: { keys: string[] }) {
+  const s = useProjectStore(
+    useShallow((st) => ({ objective: st.objective, answers: st.answers, followUps: st.followUps, images: st.images, setStep: st.setStep, setActivePillar: st.setActivePillar, keep: st.keepAsTyped, openWizard: st.openWizard })),
+  )
+  const statuses = useRuntimeStore((r) => r.translationStatus)
+  if (!keys.length) return null
+  return (
+    <div className="mt-4 rounded-xl border border-amberglow-400/40 bg-amberglow-400/5 p-4" data-testid="pending-translations">
+      <div className="flex items-center gap-2 text-sm text-ink-100">
+        <Languages className="h-4 w-4 text-amberglow-400" />
+        {keys.length} {keys.length === 1 ? 'answer is' : 'answers are'} still in Tagalog. The brief is written in English, so {keys.length === 1 ? 'it is' : 'they are'} translated first.
+      </div>
+      <ul className="mt-3 space-y-2">
+        {keys.map((key) => {
+          const where = describeField(s, key)
+          const st = statuses[key]
+          const note =
+            st?.state === 'translating'
+              ? 'Translating now…'
+              : st?.state === 'waiting-model'
+                ? 'Waits for the AI model to finish downloading.'
+                : st?.state === 'no-model'
+                  ? 'Needs the AI model (Setup) — or rewrite it in English.'
+                  : st?.state === 'error'
+                    ? `Translation failed: ${st.error}`
+                    : 'Queued for translation.'
+          return (
+            <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="pending-translation">
+              <span className="min-w-0 flex-1 truncate text-ink-200" title={where.label}>
+                {where.label}
+              </span>
+              <span className="text-ink-400">{note}</span>
+              <button
+                type="button"
+                className="font-medium text-brass-300 hover:underline"
+                onClick={() => {
+                  if (where.pillar) s.setActivePillar(where.pillar, where.page)
+                  s.setStep(where.step)
+                }}
+              >
+                Go to answer
+              </button>
+              {st?.state === 'no-model' && (
+                <button type="button" className="font-medium text-brass-300 hover:underline" onClick={s.openWizard}>
+                  Open Setup
+                </button>
+              )}
+              <button type="button" className="font-medium text-ink-300 hover:text-ink-100 hover:underline" onClick={() => s.keep(key)} data-testid="pending-keep">
+                Keep as typed
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
 }
 
 /** The audit runs on the settled text, so keystrokes never wait for it. */
@@ -183,8 +233,9 @@ function DraftStep() {
   )
   const running = useRuntimeStore((r) => Boolean(r.draft?.running))
   const ready = useReadiness()
+  const pending = useProjectStore(useShallow(selectPendingTranslations))
   const [mode, setMode] = useState<ViewMode>('split')
-  const canGenerate = ready.intake && ready.interview && !running
+  const canGenerate = ready.intake && ready.interview && pending.length === 0 && !running
   const sections = useMemo(() => countSections(s.brief.markdown), [s.brief.markdown])
   const words = useMemo(() => (s.brief.markdown.match(/\S+/g) ?? []).length, [s.brief.markdown])
 
@@ -192,21 +243,23 @@ function DraftStep() {
     <div>
       <SectionTitle eyebrow="Step 3 · Draft the VIP Design Brief" title="Exact 9-section Architectural Design Brief">
         <div className="text-xs text-ink-400">
-          Drafting engine: <span className="text-ink-100">{s.binding ? describeBinding(s.binding) : 'Deterministic brief composer'}</span>
+          Written by: <span className="text-ink-100">{s.binding ? describeBinding(s.binding) : 'Built-in brief writer (no AI model)'}</span>
         </div>
       </SectionTitle>
 
       <div className="panel p-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-center">
           <Readiness ok={ready.intake} label="Intake & visual analysis complete" testId="ready-intake" />
           <Readiness ok={ready.interview} label={`8-pillar interview complete (${ready.answered}/${ready.total})`} testId="ready-interview" />
+          <Readiness ok={pending.length === 0} label={pending.length ? `${pending.length} Tagalog ${pending.length === 1 ? 'answer' : 'answers'} to translate` : 'All answers in English'} testId="ready-language" />
           <button type="button" className="btn-primary" disabled={!canGenerate} onClick={() => void s.generate()} data-testid="generate-brief">
             {running ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {s.brief.markdown ? 'Regenerate draft' : 'Generate the 9-section brief'}
           </button>
         </div>
+        <PendingTranslations keys={pending} />
         {!s.binding && (
-          <p className="mt-3 text-xs text-ink-400">No drafting model is configured, so the deterministic composer drafts the brief from your interview. Configure a model in Setup for AI drafting.</p>
+          <p className="mt-3 text-xs text-ink-400">No drafting model is configured, so the built-in brief writer drafts the brief from your interview. Install the AI model in Setup for AI drafting.</p>
         )}
         {s.brief.markdown && !running && <p className="mt-3 text-xs text-ink-400">Regenerating replaces your edits and clears any approval.</p>}
       </div>
@@ -259,8 +312,10 @@ function CheckRow({ check }: { check: ComplianceCheck }) {
   const { applyFix, replacement, setReplacement } = useProjectStore(
     useShallow((s) => ({ applyFix: s.applyFix, replacement: s.athleteReplacement, setReplacement: s.setAthleteReplacement })),
   )
+  const translating = useRuntimeStore((r) => r.briefTranslating)
   const [open, setOpen] = useState(false)
   const isForbidden = check.id === 'forbidden-athletes'
+  const isLanguage = check.id === 'english-only'
   return (
     <li className={`rounded-xl border p-3 ${check.passed ? 'border-ink-700 bg-ink-900/50' : 'border-ember-500/40 bg-ember-500/5'}`} data-testid={`check-${check.id}`} data-passed={check.passed}>
       <div className="flex items-start gap-2.5">
@@ -276,8 +331,16 @@ function CheckRow({ check }: { check: ComplianceCheck }) {
           )}
         </div>
         {!check.passed && check.autoFixable && !isForbidden && (
-          <button type="button" className="btn-secondary btn-sm shrink-0" onClick={() => applyFix(check.id)} data-testid={`fix-${check.id}`}>
-            <WandSparkles className="h-3.5 w-3.5" /> Fix
+          <button type="button" className="btn-secondary btn-sm shrink-0" disabled={isLanguage && translating} onClick={() => applyFix(check.id)} data-testid={`fix-${check.id}`}>
+            {isLanguage ? (
+              <>
+                {translating ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />} Translate to English
+              </>
+            ) : (
+              <>
+                <WandSparkles className="h-3.5 w-3.5" /> Fix
+              </>
+            )}
           </button>
         )}
       </div>
@@ -379,7 +442,7 @@ function ReviewStep() {
             <ul className="mt-3 space-y-1.5 text-xs">
               <Prereq ok={ready.intake} label="Intake & visual analysis complete" />
               <Prereq ok={ready.interview} label="8-pillar interview complete" />
-              <Prereq ok={report.allPassed} label="All 7 compliance checks passed" />
+              <Prereq ok={report.allPassed} label={`All ${report.total} compliance checks passed`} />
             </ul>
             {s.approved && s.approval ? (
               <div className="mt-4" data-testid="approved-state">

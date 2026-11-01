@@ -1,12 +1,16 @@
 import { SHOP_DRAWING, closeWizard, expect, test } from './support/fixtures'
 
 /**
- * Opt-in test against the REAL local Ollama server (http://localhost:11434) and a real
- * vision model. Run with:  LIVE_OLLAMA=1 OLLAMA_VISION_MODEL=<installed vision model> npx playwright test 06
- * It is skipped by default because inference speed depends entirely on the host GPU/CPU.
+ * Opt-in tests against the REAL local Ollama server (http://localhost:11434). Run with:
+ *   LIVE_OLLAMA=1 [OLLAMA_VISION_MODEL=<vision model>] [OLLAMA_TEXT_MODEL=<text model>] npx playwright test 06
+ * Skipped by default because inference speed depends entirely on the host GPU/CPU. Run them one at
+ * a time on low-memory machines (each loads a model into RAM).
  */
 const LIVE = process.env.LIVE_OLLAMA === '1'
 const MODEL = process.env.OLLAMA_VISION_MODEL ?? 'ornith-1.5:9b'
+const TEXT_MODEL = process.env.OLLAMA_TEXT_MODEL ?? 'llama3.2:3b'
+
+test.use({ realOllama: true })
 
 test.describe('Live local Ollama inference', () => {
   test.skip(!LIVE, 'Set LIVE_OLLAMA=1 to run against the real local Ollama server.')
@@ -16,7 +20,7 @@ test.describe('Live local Ollama inference', () => {
     await page.goto('/')
     await page.getByTestId('engine-tab-ollama').click()
     await expect(page.getByTestId('ollama-status')).toContainText('running', { timeout: 15_000 })
-    await page.locator('details summary').click()
+    await page.getByText('Choose models by hand (advanced)').click()
     await page.getByTestId('binding-vision').selectOption(`ollama|${MODEL}`)
     await page.getByTestId('binding-text').selectOption(`ollama|${MODEL}`)
     await closeWizard(page)
@@ -40,5 +44,28 @@ test.describe('Live local Ollama inference', () => {
     await page.getByTestId('ask-followup').click()
     await expect(page.getByTestId('followup-question')).toHaveText(/\?$/, { timeout: 4 * 60_000 })
     console.log('LIVE follow-up:', await page.getByTestId('followup-question').innerText())
+  })
+
+  test(`translates Tagalog input to English with ${TEXT_MODEL}`, async ({ page }) => {
+    test.setTimeout(15 * 60_000)
+    await page.goto('/')
+    await page.getByTestId('engine-tab-ollama').click()
+    await expect(page.getByTestId('ollama-status')).toContainText('running', { timeout: 15_000 })
+    await page.getByText('Choose models by hand (advanced)').click()
+    await page.getByTestId('binding-text').selectOption(`ollama|${TEXT_MODEL}`)
+    await closeWizard(page)
+
+    const tagalog = 'Gusto ko ng pribadong bahay sa burol na may malaking kusina na bukas sa sala, tatlong kwarto na may sariling banyo, at dapat matibay ito sa bagyo at baha.'
+    const objective = page.getByTestId('objective-input')
+    await objective.fill(tagalog)
+    await objective.blur()
+    const note = page.locator('[data-testid="translation-note"][data-field="objective"]')
+    await expect(note).toHaveAttribute('data-state', 'done', { timeout: 10 * 60_000 })
+    const english = await objective.inputValue()
+    console.log('LIVE translation:', english)
+    expect(english).not.toBe(tagalog)
+    expect(english).toMatch(/kitchen/i)
+    expect(english).toMatch(/bedroom/i)
+    expect(english).toMatch(/typhoon|storm/i)
   })
 })

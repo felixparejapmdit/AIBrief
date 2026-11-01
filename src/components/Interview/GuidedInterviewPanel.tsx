@@ -5,7 +5,8 @@ import { PILLARS, pillarById, questionPages } from '../../constants/interviewPil
 import { isAnswered, selectInterviewProgress, useProjectStore } from '../../store/useProjectStore'
 import { useRuntimeStore } from '../../store/useRuntimeStore'
 import type { InterviewQuestion, PillarId } from '../../types/architecture'
-import { ProgressBar } from '../ui/primitives'
+import { LanguageHint, ProgressBar } from '../ui/primitives'
+import { TranslationNote } from '../ui/TranslationNote'
 
 function PillarSidebar() {
   const { answers, active, setActivePillar } = useProjectStore(useShallow((s) => ({ answers: s.answers, active: s.activePillar, setActivePillar: s.setActivePillar })))
@@ -59,8 +60,8 @@ function PillarSidebar() {
 }
 
 const QuestionCard = memo(function QuestionCard({ q, n }: { q: InterviewQuestion; n: number }) {
-  const { value, setAnswer, toggleChip } = useProjectStore(
-    useShallow((s) => ({ value: s.answers[q.id]?.value ?? '', setAnswer: s.setAnswer, toggleChip: s.toggleChip })),
+  const { value, setAnswer, toggleChip, translateField } = useProjectStore(
+    useShallow((s) => ({ value: s.answers[q.id]?.value ?? '', setAnswer: s.setAnswer, toggleChip: s.toggleChip, translateField: s.translateField })),
   )
   const selected = new Set(value.split(';').map((v) => v.trim()))
   const answered = value.trim().length >= q.minLength
@@ -93,11 +94,14 @@ const QuestionCard = memo(function QuestionCard({ q, n }: { q: InterviewQuestion
           <textarea
             id={`a-${q.id}`}
             data-testid={`answer-${q.id}`}
+            data-translate-key={`answer:${q.id}`}
             className="input mt-3 min-h-[84px] resize-y leading-relaxed"
             placeholder={q.placeholder}
             value={value}
             onChange={(e) => setAnswer(q.id, e.target.value)}
+            onBlur={() => void translateField(`answer:${q.id}`)}
           />
+          <TranslationNote fieldKey={`answer:${q.id}`} value={value} className="mt-1.5" />
         </div>
       </div>
     </div>
@@ -105,13 +109,14 @@ const QuestionCard = memo(function QuestionCard({ q, n }: { q: InterviewQuestion
 })
 
 function FollowUps({ pillar }: { pillar: PillarId }) {
-  const { allFollowUps, answer, remove, request, hasModel } = useProjectStore(
+  const { allFollowUps, answer, remove, request, hasModel, translateField } = useProjectStore(
     useShallow((s) => ({
       allFollowUps: s.followUps,
       answer: s.answerFollowUp,
       remove: s.removeFollowUp,
       request: s.requestFollowUp,
       hasModel: Boolean(s.engine.text ?? s.engine.vision),
+      translateField: s.translateField,
     })),
   )
   const followUps = useMemo(() => allFollowUps.filter((f) => f.pillar === pillar), [allFollowUps, pillar])
@@ -133,9 +138,12 @@ function FollowUps({ pillar }: { pillar: PillarId }) {
             className="input mt-2 min-h-[64px] resize-y"
             placeholder="Answer (optional — included in the brief)"
             data-testid="followup-answer"
+            data-translate-key={`followup:${f.id}`}
             value={f.answer}
             onChange={(e) => answer(f.id, e.target.value)}
+            onBlur={() => void translateField(`followup:${f.id}`)}
           />
+          <TranslationNote fieldKey={`followup:${f.id}`} value={f.answer} className="mt-1.5" />
         </div>
       ))}
       <button type="button" className="btn-ghost btn-sm" disabled={!hasModel || loading} onClick={() => void request(pillar)} data-testid="ask-followup" title={hasModel ? undefined : 'Configure a model in Setup first'}>
@@ -187,6 +195,7 @@ export function GuidedInterviewPanel() {
             </h2>
             <p className="mt-1 text-sm text-ink-400">{pillar.description}</p>
           </div>
+          <LanguageHint />
         </div>
 
         <div key={`${pillar.id}-${safePage}`} className="step-enter mt-5 space-y-4">

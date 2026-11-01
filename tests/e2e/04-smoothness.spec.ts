@@ -91,7 +91,7 @@ test.describe('Smoothness: no layout shift, no flicker, responsive input', () =>
     await editor.press('Control+End')
     await typeMeasured(page, editor, '\nAdditional note for The Client: confirm stone samples on site.')
     await page.getByTestId('to-review').click()
-    await expect(page.getByTestId('compliance-score')).toHaveText('7/7 passed')
+    await expect(page.getByTestId('compliance-score')).toHaveText('8/8 passed')
     await page.getByTestId('open-setup').click()
     await expect(page.getByTestId('setup-wizard')).toBeVisible()
     await page.getByTestId('close-setup').click()
@@ -108,11 +108,17 @@ test.describe('Smoothness: no layout shift, no flicker, responsive input', () =>
     for (const e of perf.events) if (e.interactionId) perInteraction.set(e.interactionId, Math.max(perInteraction.get(e.interactionId) ?? 0, e.duration))
     const interactions = [...perInteraction.values()]
     const afterLoad = perf.longTasks.filter((t) => t.start > perf.mark)
+    // Per-field breakdown (objective, interview answer, brief editor) to locate any regression.
+    const byField = perf.typingWindows.map(([a, b]) => {
+      const xs = perf.events.filter((e) => /^(keydown|keypress|keyup|beforeinput|input)$/.test(e.name) && e.start >= a && e.start <= b).map((e) => e.duration)
+      return `${pct(xs, 0.5)}/${pct(xs, 0.95)}`
+    })
     const report = {
       cls: perf.cls,
       keystrokeEventsOver16ms: keystrokes.length,
       keystrokeP50: pct(keystrokes, 0.5),
       keystrokeP95: pct(keystrokes, 0.95),
+      keystrokeP50P95ByField: byField.join(' | '),
       interactions: interactions.length,
       inpP98: pct(interactions, 0.98),
       worstInteraction: Math.max(0, ...interactions),
@@ -120,6 +126,7 @@ test.describe('Smoothness: no layout shift, no flicker, responsive input', () =>
       longestTaskAfterLoad: Math.max(0, ...afterLoad.map((t) => t.duration)),
     }
     console.log('SMOOTHNESS', JSON.stringify(report))
+    if (perf.shifts.length) console.log('LAYOUT SHIFTS', JSON.stringify(perf.shifts))
     test.info().annotations.push({ type: 'smoothness', description: JSON.stringify(report) })
 
     // Web Vitals "good": CLS ≤ 0.1, INP ≤ 200 ms. The app is held to a 10× stricter CLS bound.

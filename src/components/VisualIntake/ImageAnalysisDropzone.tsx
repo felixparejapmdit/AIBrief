@@ -9,7 +9,8 @@ import type { ImageCategory, IntakeImage } from '../../types/architecture'
 import { DESIGN_PRINCIPLES } from '../../types/architecture'
 import { ACCEPTED_IMAGE_TYPES } from '../../utils/imageProcessing'
 import { formatBytes } from '../../utils/text'
-import { SectionTitle } from '../ui/primitives'
+import { LanguageHint, SectionTitle } from '../ui/primitives'
+import { TranslationNote } from '../ui/TranslationNote'
 
 const CATEGORIES: Array<{ id: ImageCategory | 'auto'; label: string }> = [
   { id: 'auto', label: 'Auto-detect' },
@@ -34,8 +35,8 @@ function AnalysisList({ title, items, icon }: { title: string; items: string[]; 
 }
 
 const ImageCard = memo(function ImageCard({ image }: { image: IntakeImage }) {
-  const { updateImage, removeImage, analyzeImage } = useProjectStore(
-    useShallow((s) => ({ updateImage: s.updateImage, removeImage: s.removeImage, analyzeImage: s.analyzeImage })),
+  const { updateImage, removeImage, analyzeImage, translateField } = useProjectStore(
+    useShallow((s) => ({ updateImage: s.updateImage, removeImage: s.removeImage, analyzeImage: s.analyzeImage, translateField: s.translateField })),
   )
   const stream = useRuntimeStore((s) => s.analysisStream[image.id])
   const a = image.analysis
@@ -76,9 +77,12 @@ const ImageCard = memo(function ImageCard({ image }: { image: IntakeImage }) {
           placeholder="Notes for the analyst (e.g. EPDM pad under the steel cover)…"
           aria-label="Image notes"
           data-testid="image-notes"
+          data-translate-key={`image:${image.id}`}
           value={image.notes}
           onChange={(e) => updateImage(image.id, { notes: e.target.value })}
+          onBlur={() => void translateField(`image:${image.id}`)}
         />
+        <TranslationNote fieldKey={`image:${image.id}`} value={image.notes} className="mt-1" />
         <div className="mt-2 flex gap-2">
           <button type="button" className="btn-secondary btn-sm flex-1" disabled={image.status === 'analyzing'} onClick={() => void analyzeImage(image.id)} data-testid="reanalyze-image">
             <ScanSearch className="h-3.5 w-3.5" /> {a ? 'Re-analyse' : 'Analyse'}
@@ -159,6 +163,7 @@ export function ImageAnalysisDropzone() {
       vision: st.engine.vision,
       text: st.engine.text,
       openWizard: st.openWizard,
+      translateField: st.translateField,
     })),
   )
   const status = useProjectStore(useShallow((st) => selectIntakeStatus(st)))
@@ -192,20 +197,30 @@ export function ImageAnalysisDropzone() {
           </p>
         </div>
         <div className="border-t border-ink-700 px-6 py-5">
-          <label htmlFor="objective" className="text-sm font-medium text-ink-100">
-            What is the core objective of this project?
-          </label>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <label htmlFor="objective" className="text-sm font-medium text-ink-100">
+              What is the core objective of this project?
+            </label>
+            <LanguageHint />
+          </div>
           <textarea
             id="objective"
             data-testid="objective-input"
+            data-translate-key="objective"
             className="input mt-2 min-h-[92px] resize-y text-[15px] leading-relaxed"
             placeholder="e.g. Design a private hillside residence with an entertaining pavilion that stays discreet, durable and easy to maintain for decades."
             value={s.objective}
             onChange={(e) => s.setObjective(e.target.value)}
+            onBlur={() => void s.translateField('objective')}
           />
-          <div className="mt-1.5 flex justify-between text-[11px]">
-            <span className={status.objectiveOk ? 'text-verdigris-300' : 'text-ink-400'}>{status.objectiveOk ? 'Objective captured' : 'At least 15 characters'}</span>
-            <span className="text-ink-500 tabular">{s.objective.trim().length} chars</span>
+          <div className="mt-1.5 flex items-start justify-between gap-4">
+            <TranslationNote
+              fieldKey="objective"
+              value={s.objective}
+              className="min-w-0 flex-1"
+              idle={<span className={status.objectiveOk ? 'text-verdigris-300' : 'text-ink-400'}>{status.objectiveOk ? 'Objective captured' : 'At least 15 characters'}</span>}
+            />
+            <span className="pt-1 text-xs text-ink-500 tabular">{s.objective.trim().length} chars</span>
           </div>
         </div>
       </section>
@@ -213,9 +228,9 @@ export function ImageAnalysisDropzone() {
       <section className="panel p-6">
         <SectionTitle eyebrow="Visual intake" title="Upload visual material">
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-300">
-            <span className="text-ink-400">Vision engine:</span>
+            <span className="text-ink-400">Images analysed by:</span>
             <button type="button" className="chip" onClick={s.openWizard} data-testid="vision-engine-chip">
-              {s.vision?.vision ? describeBinding(s.vision) : s.text ? `${describeBinding(s.text)} (metadata only)` : 'On-device pixel analysis — set up a model'}
+              {s.vision?.vision ? describeBinding(s.vision) : s.text ? `${describeBinding(s.text)} (from file details)` : 'Built-in pixel analysis — install the AI in Setup'}
             </button>
           </div>
         </SectionTitle>

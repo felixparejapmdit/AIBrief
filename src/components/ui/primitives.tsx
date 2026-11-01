@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, Languages, TriangleAlert, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useRuntimeStore } from '../../store/useRuntimeStore'
@@ -46,6 +46,16 @@ export function SectionTitle({ eyebrow, title, children }: { eyebrow: string; ti
   )
 }
 
+/** Tells Philippe he can answer in Tagalog; it is translated to English automatically. */
+export function LanguageHint() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-ink-400" data-testid="language-hint">
+      <Languages className="h-3.5 w-3.5 text-brass-300" aria-hidden />
+      English or Tagalog — Tagalog is translated to English automatically
+    </span>
+  )
+}
+
 const TONE = {
   info: { icon: Info, cls: 'border-ink-600 text-ink-100' },
   success: { icon: CircleCheck, cls: 'border-verdigris-500/60 text-verdigris-300' },
@@ -56,7 +66,8 @@ const TONE = {
 export function Toaster() {
   const { toasts, dismiss } = useRuntimeStore(useShallow((s) => ({ toasts: s.toasts, dismiss: s.dismissToast })))
   return (
-    <div className="no-print pointer-events-none fixed bottom-5 right-5 z-[70] flex w-[min(380px,calc(100vw-2.5rem))] flex-col gap-2" aria-live="polite">
+    // Bottom-centre: clear of the primary Back / Continue buttons that sit at the bottom corners of every step.
+    <div className="no-print pointer-events-none fixed bottom-5 left-1/2 z-[70] flex w-[min(420px,calc(100vw-2.5rem))] -translate-x-1/2 flex-col gap-2" aria-live="polite">
       {toasts.map((t) => {
         const { icon: Icon, cls } = TONE[t.tone]
         return (

@@ -4,14 +4,14 @@ An installable, offline-capable PWA (macOS & Windows) that helps **Philippe, Con
 
 | Step | What happens |
 | --- | --- |
-| **Setup** | Detects OS, CPU, GPU/VRAM, RAM, storage and WebGPU, recommends a hardware tier and installs the right model in one click (Ollama or in-browser WebGPU, with an optional Claude cloud fallback). |
+| **Setup** | Detects OS, CPU, GPU/VRAM, RAM, storage and WebGPU, recommends a hardware tier and **downloads the required models automatically** (Ollama or in-browser WebGPU, with an optional Claude cloud fallback). A plain-language status panel says what is happening and what to do next. |
 | **1. Intake & Visual Analysis** | Core objective + drag-and-drop site photos, SketchUp renders, shop drawings and design pegs, analysed into Style & Spatial Flow, Material Build-Ups, Constructability Notes and 7-Principles observations. |
 | **2. 8-Pillar Interview** | One or two focused questions at a time, quick-fill chips, a live pillar-progress sidebar and optional AI follow-up questions. |
 | **3. Draft** | Generates the brief section by section in the exact mandated 9-section Markdown layout (headings and table columns are enforced). |
-| **4. Review & Compliance** | Live scorecard (The Client, forbidden-term guardrail, political/sentiment risk, 7 Principles, 5 Essential Criteria, Where & When precedents, exact structure) with one-click fixes and an explicit **Approve Draft & Unlock Print-Ready PDF** gate. |
+| **4. Review & Compliance** | Live scorecard (The Client, forbidden-term guardrail, political/sentiment risk, 7 Principles, 5 Essential Criteria, Where & When precedents, exact structure, English only) with one-click fixes and an explicit **Approve Draft & Unlock Print-Ready PDF** gate. |
 | **5. Print-Ready PDF** | Executive preview and 1-click PDF export with Woodland Construction headers, footers, page numbers and crisp tables (plus native vector print). |
 
-Everything is persisted locally (IndexedDB) and works offline once installed.
+Philippe can type in **English or Tagalog (including Taglish)** anywhere — Tagalog is translated to English automatically. Everything is persisted locally (IndexedDB) and works offline once installed.
 
 ---
 
@@ -40,6 +40,22 @@ Open the app in **Chrome or Edge** (macOS or Windows) and use **Install app** in
 | **Browser WebGPU** (`@mlc-ai/web-llm`) | No install at all | Chrome/Edge 113+. Weights stream into browser storage with byte-level progress, speed, pause (resumes mid-shard via HTTP Range) and cancel. Runs entirely in a Web Worker so the UI never stalls. |
 | **Cloud fallback** (Claude) | No capable local hardware | Paste an Anthropic API key in Setup (stored only in this browser). Defaults to `claude-opus-5-5` with server-side refusal fallbacks. |
 
+### Automatic model download
+
+On first run the Setup window checks the machine and then downloads the models the detected tier needs — no click required:
+
+- **Engine:** Ollama when it is running (fastest, and it keeps models on disk), otherwise the in-browser WebGPU engine. If neither is available, Setup explains how to install Ollama and starts the download as soon as Ollama is detected.
+- **Only what is missing** is downloaded, one model at a time, with live progress in Setup and in the top bar. Downloads continue in the background while the brief is being prepared.
+- **Safe by default:** nothing starts while offline, on a Data-Saver connection, or without enough browser storage; a failed download is never retried in a loop; a tier picked by hand is only downloaded after "Download now"; models chosen by hand are respected.
+- **Cancel** switches automatic downloads off until the "Download the required AI models automatically" switch is turned back on.
+
+### Tagalog → English translation
+
+- Every free-text field (objective, interview answers, follow-up answers, image notes) detects Tagalog/Taglish and, when Philippe leaves the field, replaces it with English using the active writing model (`src/services/translator.ts`). English parts and quick-fill chips are kept exactly; numbers, units and brand names are preserved.
+- Short everyday answers ("Oo", "Wala pa po") are translated offline from a built-in phrasebook. **Show original** and **Undo** are always available; **Keep as typed** leaves a field untouched.
+- Without a model, Tagalog waits for the download to finish; drafting is held until every answer is in English (or kept as typed), and the Step 4 **English only** check translates any Tagalog lines in the brief with one click.
+- Detection (`src/utils/tagalog.ts`) is unit-tested against every English sentence the app produces, so English text never triggers a translation.
+
 ### Hardware tiers (deterministic recommendation engine)
 
 | Tier | Detected when | Ollama | WebGPU | Settings |
@@ -60,7 +76,8 @@ All tiers use temperature **0.25** for technical precision. Browsers cap `naviga
 - **Forbidden term** — an active regex guardrail (`src/utils/complianceAuditor.ts`) flags every form of "athletes" (case, plural, possessive) and replaces it with *guests*, *patrons* or *principals*. It runs automatically on every generated section and on demand in Step 4. The system prompt itself never contains the term (enforced at module load and by unit tests).
 - **Apolitical** — political parties, officials, campaigns and endorsements are flagged outside the Section 9 Risk Shield, which must summarise sentiment risk in bullets.
 - **Exact layout** — header block, the nine `##` headings, required `###` subheadings and the three table column sets are validated; a normaliser repairs drifting model output while keeping valid model text.
-- **PDF gate** — the PDF stays locked until intake and interview are complete, all 7 checks pass and **Approve Draft for Print** is clicked. Any later edit re-locks it.
+- **English only** — Tagalog lines in the brief fail the audit until translated (one click), so the client-facing PDF is always in English.
+- **PDF gate** — the PDF stays locked until intake and interview are complete, all 8 checks pass and **Approve Draft for Print** is clicked. Any later edit re-locks it.
 
 ---
 
@@ -72,10 +89,10 @@ npm test           # Vitest unit tests (auditor, normaliser, composer, tiers, GP
 npm run test:e2e   # Playwright end-to-end suite against the production build
 ```
 
-The e2e suite runs a real streaming mock of the Ollama API (pull progress, pause/resume, chat streaming) and covers the Setup Wizard, the complete 5-step workflow with PDF export and persistence, guardrails and gating, smoothness budgets (CLS, keystroke latency, INP) and PWA installability/offline mode.
+The e2e suite runs a real streaming mock of the Ollama API (pull progress, pause/resume, chat streaming, translation) and covers the Setup Wizard and automatic downloads, the complete 5-step workflow with PDF export and persistence, guardrails and gating, Tagalog translation, smoothness budgets (CLS, keystroke latency, INP) and PWA installability/offline mode. Tests never touch a real Ollama or download real weights: `localhost:11434` is refused and WebGPU is hidden unless a spec opts in.
 
 - `PW_GPU=1 npm run test:e2e` runs Chromium on the host GPU instead of the software rasteriser.
-- `LIVE_OLLAMA=1 OLLAMA_VISION_MODEL=<model> npx playwright test 06` runs real inference against your local Ollama.
+- `LIVE_OLLAMA=1 OLLAMA_VISION_MODEL=<model> OLLAMA_TEXT_MODEL=<model> npx playwright test 06` runs real image analysis and real Tagalog translation against your local Ollama (run one test at a time on low-memory machines).
 
 ---
 
@@ -92,6 +109,9 @@ src/
   services/modelDownloader.ts      Ollama pull + WebLLM shard streaming (pause/resume/cancel)
   services/aiClient.ts             Ollama, WebGPU (worker) and Claude clients; image analysis
   services/briefGenerator.ts       Section-by-section drafting
+  services/autoDownload.ts         Automatic model-download planner (pure, unit-tested)
+  services/translator.ts           Tagalog → English translation with the active model
+  utils/tagalog.ts                 Tagalog detection, offline phrasebook, piece-wise translation
   workers/webllm.worker.ts         WebLLM engine + downloads, off the UI thread
   utils/complianceAuditor.ts       Guardrails, audits and auto-fixes
   utils/briefTemplate.ts           Parser, validator and normaliser for the 9-section layout

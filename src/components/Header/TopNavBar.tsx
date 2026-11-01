@@ -23,12 +23,19 @@ const DOT = { ready: 'bg-verdigris-400', missing: 'bg-amberglow-400', none: 'bg-
 
 function EngineChip({ role, binding }: { role: string; binding: ModelBinding | null }) {
   const state = useBindingReady(binding)
-  const engine = binding ? (binding.engine === 'ollama' ? 'Ollama' : binding.engine === 'webllm' ? 'WebGPU' : 'Claude') : ''
+  // Live download percentage for this model, as a primitive so other models' ticks don't re-render it.
+  const downloading = useRuntimeStore((s) => {
+    const d = binding ? Object.values(s.downloads).find((x) => x.model === binding.model) : undefined
+    return d && ['preparing', 'downloading', 'verifying', 'loading', 'paused'].includes(d.status) ? (d.status === 'paused' ? 'paused' : `${Math.round(d.fraction * 100)}%`) : ''
+  })
+  const engine = binding ? (binding.engine === 'ollama' ? 'Ollama' : binding.engine === 'webllm' ? 'this browser' : 'Claude cloud') : ''
+  const status = state === 'ready' ? 'ready' : downloading ? `downloading ${downloading}` : state === 'missing' ? 'not installed yet' : 'not set up'
   return (
-    <div className="flex min-w-0 items-center gap-2" title={binding ? `${role}: ${binding.model} (${engine}) — ${state}` : `${role}: not configured`}>
-      <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[state]}`} />
+    <div className="flex min-w-0 items-center gap-2" title={binding ? `${role}: ${binding.model} on ${engine} — ${status}` : `${role}: not set up — open Setup`}>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${downloading && state !== 'ready' ? 'animate-pulse bg-brass-400' : DOT[state]}`} />
       <span className="text-[11px] uppercase tracking-wider text-ink-400">{role}</span>
-      <span className="truncate text-xs text-ink-100">{binding ? binding.model : 'Not set'}</span>
+      <span className="truncate text-xs text-ink-100">{binding ? binding.model : 'Not set up'}</span>
+      {downloading && state !== 'ready' && <span className="shrink-0 text-[11px] text-brass-200 tabular">{downloading}</span>}
     </div>
   )
 }
@@ -50,10 +57,16 @@ export function TopNavBar() {
           </div>
         </div>
 
-        <div className="mx-auto hidden min-w-0 max-w-md flex-1 grid-cols-2 gap-4 rounded-full border border-ink-700 bg-ink-900/70 px-4 py-1.5 lg:grid" data-testid="engine-status">
-          <EngineChip role="Vision" binding={vision} />
-          <EngineChip role="Draft" binding={text} />
-        </div>
+        <button
+          type="button"
+          onClick={openWizard}
+          title="AI status — open Setup"
+          className="mx-auto hidden min-w-0 max-w-md flex-1 grid-cols-2 gap-4 rounded-full border border-ink-700 bg-ink-900/70 px-4 py-1.5 text-left transition-colors duration-150 hover:border-ink-500 lg:grid"
+          data-testid="engine-status"
+        >
+          <EngineChip role="Images" binding={vision} />
+          <EngineChip role="Writing" binding={text} />
+        </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {!online && (

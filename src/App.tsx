@@ -34,7 +34,11 @@ export default function App() {
     void s.refreshEngines()
 
     const runtime = useRuntimeStore.getState()
-    const onOnline = () => runtime.set({ online: true })
+    const onOnline = () => {
+      runtime.set({ online: true })
+      // Downloads that were waiting for a connection start now.
+      useProjectStore.getState().ensureRequiredModels()
+    }
     const onOffline = () => runtime.set({ online: false })
     const onVisible = () => {
       if (document.visibilityState === 'visible') void useProjectStore.getState().refreshEngines()

@@ -101,7 +101,7 @@ test('full workflow: intake → 8-pillar interview → 9-section draft → compl
     await page.getByTestId(`fix-${id}`).click()
     await expect(page.getByTestId(`check-${id}`)).toHaveAttribute('data-passed', 'true')
   }
-  await expect(page.getByTestId('compliance-score')).toHaveText('7/7 passed')
+  await expect(page.getByTestId('compliance-score')).toHaveText('8/8 passed')
   const fixed = await page.evaluate(() => (document.querySelector('[data-testid="brief-preview"]') as HTMLElement).innerText)
   expect(fixed).toContain('The Client')
   expect(fixed).not.toMatch(/\bVIP\b/)

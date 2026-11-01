@@ -105,6 +105,14 @@ export const IMAGE_ANALYSIS_JSON = {
   },
 }
 
+/** Canned Tagalog → English translations (the translator's few-shot prompt is detected by its system message). */
+export const TRANSLATIONS: Record<string, string> = {
+  'Gusto ko ng pribadong bahay sa burol na may malaking kusina at pavilion para sa mga bisita, at dapat matibay ito sa bagyo.':
+    'I want a private house on the hillside with a large kitchen and a pavilion for guests, and it must withstand typhoons.',
+  'Kailangan ng tatlong kwarto na may sariling banyo ang bawat isa.': 'Three bedrooms are needed, each with its own bathroom.',
+  'Dapat matibay sa bagyo at baha ang bahay at hindi madilim ang sala.': 'The house must withstand typhoons and floods, and the living room must not be dark.',
+}
+
 function cors(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -175,7 +183,8 @@ export async function startMockOllama(): Promise<MockOllama> {
       const prompt = messages[messages.length - 1]?.content ?? ''
       let text: string
       const section = prompt.match(/TASK: Write the body of section (\d)/)
-      if (section) text = SECTION_OUTPUT[Number(section[1])] ?? ''
+      if (/^You translate Filipino \(Tagalog\)/.test(messages[0]?.content ?? '')) text = TRANSLATIONS[prompt.trim()] ?? `Translation unavailable for: ${prompt}`
+      else if (section) text = SECTION_OUTPUT[Number(section[1])] ?? ''
       else if (/Ask ONE concise follow-up question/.test(prompt)) text = 'Which views from the pavilion must stay completely private from neighbouring lots?'
       else if (body.format) text = JSON.stringify(IMAGE_ANALYSIS_JSON)
       else text = 'OK'
