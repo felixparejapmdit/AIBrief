@@ -1,0 +1,452 @@
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --header-h: 64px;
+    --rail-h: 60px;
+  }
+  html,
+  body {
+    background-color: #0b0d10;
+    color: #e6e9ed;
+  }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+  #root {
+    min-height: 100vh;
+    isolation: isolate;
+  }
+  ::selection {
+    background: rgba(201, 161, 74, 0.35);
+    color: #faf5ea;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #343c47 transparent;
+  }
+  :focus-visible {
+    outline: 2px solid #d8b66b;
+    outline-offset: 2px;
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Components                                                          */
+/* ------------------------------------------------------------------ */
+
+@layer components {
+  .app-backdrop {
+    background:
+      radial-gradient(1200px 500px at 50% -180px, rgba(201, 161, 74, 0.1), transparent 70%),
+      radial-gradient(900px 400px at 100% 0%, rgba(56, 74, 94, 0.18), transparent 70%),
+      #0b0d10;
+  }
+  .panel {
+    @apply rounded-2xl border border-ink-700/70 bg-ink-900/80 shadow-panel;
+  }
+  .panel-raised {
+    @apply rounded-xl border border-ink-700/80 bg-ink-850;
+  }
+  .label-luxe {
+    @apply text-[11px] font-semibold uppercase tracking-luxe text-brass-300;
+  }
+  .heading-display {
+    @apply font-display tracking-tight text-ink-100;
+  }
+  /* Shared button base (Tailwind v4 only @applies real utilities, so variants share it by selector). */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-150 disabled:opacity-45;
+  }
+  .btn-primary {
+    @apply bg-gradient-to-b from-brass-300 to-brass-500 text-ink-950 shadow-brass hover:from-brass-200 hover:to-brass-400 disabled:hover:from-brass-300 disabled:hover:to-brass-500;
+  }
+  .btn-secondary {
+    @apply border border-ink-600 bg-ink-800 text-ink-100 hover:border-brass-500/60 hover:bg-ink-750;
+  }
+  .btn-ghost {
+    @apply text-ink-200 hover:bg-ink-800 hover:text-ink-100;
+  }
+  .btn-danger {
+    @apply border border-ember-500/50 bg-ember-500/10 text-ember-300 hover:bg-ember-500/20;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .input {
+    @apply w-full rounded-lg border border-ink-600 bg-ink-950/70 px-3 py-2 text-sm text-ink-100 placeholder:text-ink-400 transition-colors duration-150 focus:border-brass-400 focus:outline-none;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-800/80 px-3 py-1 text-xs text-ink-200 transition-colors duration-150 hover:border-brass-400/70 hover:text-ink-100;
+  }
+  .chip-active {
+    @apply border-brass-400 bg-brass-500/15 text-brass-100;
+  }
+  .progress-track {
+    @apply relative h-2 w-full overflow-hidden rounded-full bg-ink-700;
+  }
+  .progress-fill {
+    @apply absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-brass-500 to-brass-300;
+    transition: width 180ms linear;
+    will-change: width;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium;
+  }
+  .step-enter {
+    animation: fade-up 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-panel {
+  animation: modal-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.modal-backdrop {
+  animation: backdrop-in 160ms ease-out both;
+}
+
+/* ------------------------------------------------------------------ */
+/* Brief preview (dark, on-screen)                                      */
+/* ------------------------------------------------------------------ */
+
+.brief-md {
+  color: #d5dae1;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.brief-md h1 {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'URW Palladio L', Georgia, serif;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  color: #f2e6c9;
+  margin: 0 0 14px;
+}
+.brief-md h2 {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'URW Palladio L', Georgia, serif;
+  font-size: 19px;
+  color: #e6cf98;
+  margin: 28px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #343c47;
+}
+.brief-md h3 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d8b66b;
+  margin: 18px 0 6px;
+}
+.brief-md p {
+  margin: 6px 0;
+}
+.brief-md ul,
+.brief-md ol {
+  margin: 6px 0 6px 20px;
+  list-style: disc;
+}
+.brief-md ol {
+  list-style: decimal;
+}
+.brief-md li {
+  margin: 3px 0;
+}
+.brief-md strong {
+  color: #f2e6c9;
+  font-weight: 600;
+}
+.brief-md blockquote {
+  margin: 10px 0;
+  padding: 10px 16px;
+  border-left: 3px solid #c9a14a;
+  background: rgba(201, 161, 74, 0.07);
+  color: #e6e9ed;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'URW Palladio L', Georgia, serif;
+  font-size: 16px;
+  font-style: italic;
+}
+.brief-md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+  font-size: 13px;
+}
+.brief-md th {
+  text-align: left;
+  background: #20262e;
+  color: #e6cf98;
+  font-weight: 600;
+  border: 1px solid #343c47;
+  padding: 7px 9px;
+}
+.brief-md td {
+  border: 1px solid #343c47;
+  padding: 7px 9px;
+  vertical-align: top;
+}
+.brief-md tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* ------------------------------------------------------------------ */
+/* Print-ready paper document (shared by on-screen preview, html2pdf   */
+/* and native print). Plain hex colours only — html2canvas cannot parse */
+/* oklch()/color-mix().                                                 */
+/* ------------------------------------------------------------------ */
+
+.pdf-sheet {
+  background: #ffffff;
+  color: #1b1f24;
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.pdf-doc {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  color: #1b1f24;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  background: #ffffff;
+}
+.pdf-doc .pdf-running-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 1.5px solid #b08a3a;
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 7.5pt;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6e5524;
+}
+.pdf-doc .pdf-running-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #d8d2c4;
+  margin-top: 22px;
+  padding-top: 6px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 7.5pt;
+  color: #6b7584;
+}
+.pdf-doc h1 {
+  font-size: 22pt;
+  letter-spacing: 0.06em;
+  color: #111418;
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.pdf-doc h2 {
+  font-size: 13.5pt;
+  color: #111418;
+  margin: 18px 0 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #c9a14a;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.pdf-doc h3 {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8f6f2e;
+  margin: 12px 0 4px;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.pdf-doc p {
+  margin: 4px 0;
+}
+.pdf-doc ul,
+.pdf-doc ol {
+  margin: 4px 0 4px 18px;
+  padding: 0;
+  list-style: disc;
+}
+.pdf-doc ol {
+  list-style: decimal;
+}
+.pdf-doc li {
+  margin: 2px 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.pdf-doc strong {
+  color: #111418;
+}
+.pdf-doc blockquote {
+  margin: 8px 0;
+  padding: 8px 14px;
+  border-left: 3px solid #b08a3a;
+  background: #faf5ea;
+  font-style: italic;
+  font-size: 11.5pt;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.pdf-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 10px;
+  font-size: 9pt;
+  line-height: 1.4;
+}
+.pdf-doc thead {
+  display: table-header-group;
+}
+.pdf-doc th {
+  background: #f2ece0;
+  color: #1b1f24;
+  text-align: left;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 8pt;
+  font-weight: 700;
+  border: 0.75pt solid #4a5361;
+  padding: 5px 7px;
+}
+.pdf-doc td {
+  border: 0.75pt solid #4a5361;
+  padding: 5px 7px;
+  vertical-align: top;
+}
+.pdf-doc tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.pdf-avoid-break {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/*
+ * html2canvas measures font baselines with a hidden `body > div > img` probe aligned to the
+ * text baseline. Tailwind's preflight makes every <img> display:block, which breaks that
+ * measurement and draws PDF text a few pixels low. Restore inline layout for the probe only.
+ */
+body > div[style*='visibility: hidden'] > img {
+  display: inline !important;
+}
+
+/* Native print: only the document prints, with running header/footer and page numbers. */
+@media print {
+  @page {
+    margin: 18mm 16mm 20mm;
+    @top-left {
+      content: 'WOODLAND CONSTRUCTION';
+      font: 600 7.5pt system-ui, sans-serif;
+      letter-spacing: 0.18em;
+      color: #6e5524;
+    }
+    @top-right {
+      content: 'Architectural Design Brief · Confidential';
+      font: 7.5pt system-ui, sans-serif;
+      color: #6e5524;
+    }
+    @bottom-left {
+      content: 'Prepared for The Client by Woodland Construction';
+      font: 7.5pt system-ui, sans-serif;
+      color: #6b7584;
+    }
+    @bottom-right {
+      content: 'Page ' counter(page) ' of ' counter(pages);
+      font: 7.5pt system-ui, sans-serif;
+      color: #6b7584;
+    }
+  }
+  html,
+  body {
+    background: #ffffff !important;
+    color: #1b1f24 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #print-root,
+  #print-root * {
+    visibility: visible;
+  }
+  #print-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  #print-root .pdf-running-header,
+  #print-root .pdf-running-footer {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

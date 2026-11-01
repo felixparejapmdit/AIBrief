@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" style="background-color: #0b0d10">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d10" />
+    <meta
+      name="description"
+      content="VIP Architectural Design Brief Creator for Woodland Construction — local-AI visual intake, guided 8-pillar interview, compliance audit and print-ready PDF briefs."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="VIP Brief" />
+    <title>VIP Architectural Design Brief Creator · Woodland Construction</title>
+    <style>
+      /* Painted before any CSS/JS loads so there is never a white flash. */
+      html, body { margin: 0; background-color: #0b0d10; color: #e6e9ed; }
+      #boot {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        opacity: 0; animation: boot-in 300ms ease-out 450ms forwards;
+        font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: 0.22em; text-transform: uppercase; color: #c9a14a;
+      }
+      @keyframes boot-in { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { #boot { animation: none; opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div id="boot">Woodland Construction</div></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
